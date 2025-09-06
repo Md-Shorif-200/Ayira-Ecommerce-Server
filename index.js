@@ -9,7 +9,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 // middlewares 
 app.use(express.json())
 
-app.use(cors())
+app.use(cors());
 
 
 // !mongodb link
