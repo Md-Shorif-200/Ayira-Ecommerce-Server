@@ -22,6 +22,7 @@ let ordersCollection;
 let usersCollection;
 let addressCollection;
 let blogsCollection;
+let commentsCollection;
 
 async function run() {
   try {
@@ -32,6 +33,7 @@ async function run() {
     usersCollection = Db.collection('All-Users');
     addressCollection = Db.collection('address');
     blogsCollection = Db.collection('blogs');
+    commentsCollection = Db.collection('comments');
 
     await client.db("admin").command({ ping: 1 });
     console.log("✅ Connected to MongoDB!");
@@ -88,6 +90,26 @@ app.get('/blogs', async (req, res) => {
   }
 });
 
+// blog page comment
+
+app.post('/comments', async (req, res) => {
+  try {
+    const comment = req.body;
+    const result = await commentsCollection.insertOne(comment);
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.get('/comments', async (req, res) => {
+  try {
+    const result = await commentsCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
 
 
 // Users
