@@ -28,6 +28,28 @@ async function run() {
     await client.connect();
 
     const Db = client.db('Ayira-Database');
+
+    const ordersCollection = Db.collection('orders');
+
+
+
+    // orders api
+
+    app.post('/orders', async (req, res) => {
+      const newOrder = req.body
+      const result = await ordersCollection.insertOne(newOrder);
+      res.send(result);
+    });
+    
+
+    app.get('/orders', async (req, res) => {
+      const orders = ordersCollection.find();
+      const result = await orders.toArray();
+      res.send(result);
+    });
+
+    // Send a ping to confirm a successful connection
+
     const usersCollection = Db.collection('All-Users');
 
 
@@ -75,6 +97,7 @@ async function run() {
 
 
 
+
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
@@ -82,6 +105,7 @@ async function run() {
   }
 }
 run().catch(console.dir);
+
 
 
 
@@ -117,7 +141,9 @@ app.get('/address', async (req, res) => {
 
 
 
+
+
 app.listen(port, () => {
-     console.log('ayira server is running on port', port);
-     
+  console.log('ayira server is running on port', port);
+
 })
