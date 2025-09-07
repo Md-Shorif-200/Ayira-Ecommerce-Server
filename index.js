@@ -21,6 +21,7 @@ const client = new MongoClient(uri, {
 let ordersCollection;
 let usersCollection;
 let addressCollection;
+let blogsCollection;
 
 async function run() {
   try {
@@ -30,6 +31,7 @@ async function run() {
     ordersCollection = Db.collection('orders');
     usersCollection = Db.collection('All-Users');
     addressCollection = Db.collection('address');
+    blogsCollection = Db.collection('blogs');
 
     await client.db("admin").command({ ping: 1 });
     console.log("✅ Connected to MongoDB!");
@@ -65,6 +67,28 @@ app.get('/orders', async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
+
+// Blogs
+app.post('/blogs', async (req, res) =>{
+  try{
+    const newBlog = req.body;
+    const result = await blogsCollection.insertOne(newBlog);
+    res.send(result);
+  }catch(err){
+    res.status(500).send({ error: err.message});
+  }
+
+});
+app.get('/blogs', async (req, res) => {
+  try {
+    const result = await blogsCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+
 
 // Users
 app.post('/api/post-users', async (req, res) => {
