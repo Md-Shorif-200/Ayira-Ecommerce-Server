@@ -29,8 +29,53 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
-    // !database collection
+    // database collections
     const Db = client.db('Ayira-Database');
+    const usersCollection = Db.collection('All-Users');
+
+
+    // ------- users relatd api--------
+    // post all users 
+       app.post('/api/post-users' , async(req,res) => {
+          const user = req.body;
+          // if user already sign up
+          const query = {email : user.email};
+          const userAlradyExist = await usersCollection.findOne(query);
+          if(userAlradyExist){
+            return  res.send({meassage : 'u are already Registerd. please log in', insertedId : null});
+          }
+
+          const  result =  await usersCollection.insertOne(user);
+          res.send(result)
+    })
+
+    //  find all users 
+    app.get('/api/find-all-users', async(req,res) => { 
+         const result = await usersCollection.find().toArray();
+         res.send(result)
+    })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
    
     // Send a ping to confirm a successful connection
