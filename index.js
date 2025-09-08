@@ -3,10 +3,15 @@ const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 5000;
 require("dotenv").config();
+const multer = require("multer");
+const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(express.json());
 app.use(cors());
+
+// Serve uploaded images statically
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.56yvv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -21,25 +26,30 @@ const client = new MongoClient(uri, {
 let ordersCollection;
 let usersCollection;
 let addressCollection;
-let productReviewCollection;
+let blogsCollection;
+let commentsCollection;
 let productAttributeCollection;
+let productReviewCollection;
+let productsCollection;
 
 async function run() {
   try {
     await client.connect();
     const Db = client.db("Ayira-Database");
 
-    ordersCollection = Db.collection("orders");
-    usersCollection = Db.collection("All-Users");
-    addressCollection = Db.collection("address");
-    // ----------- Product Management colection
-    productReviewCollection = Db.collection("Product-Reviews");
-    productAttributeCollection = Db.collection("Product-Attributes");
+    ordersCollection = Db.collection('orders');
+    usersCollection = Db.collection('All-Users');
+    addressCollection = Db.collection('address');
+    blogsCollection = Db.collection('blogs');
+    commentsCollection = Db.collection('comments');
+    productAttributeCollection = Db.collection('Product-Collections');
+    productReviewCollection = Db.collection('Product-Reviews');
+    productsCollection = Db.collection('all-products');
 
     await client.db("admin").command({ ping: 1 });
-    console.log("✅ Connected to MongoDB!");
+    console.log(" Connected to MongoDB!");
   } catch (err) {
-    console.error("❌ DB connection failed:", err);
+    console.error(" DB connection failed:", err);
   }
 }
 run().catch(console.dir);
@@ -70,6 +80,48 @@ app.get("/orders", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
+
+// Blogs
+app.post('/blogs', async (req, res) =>{
+  try{
+    const newBlog = req.body;
+    const result = await blogsCollection.insertOne(newBlog);
+    res.send(result);
+  }catch(err){
+    res.status(500).send({ error: err.message});
+  }
+
+});
+app.get('/blogs', async (req, res) => {
+  try {
+    const result = await blogsCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// blog page comment
+
+app.post('/comments', async (req, res) => {
+  try {
+    const comment = req.body;
+    const result = await commentsCollection.insertOne(comment);
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.get('/comments', async (req, res) => {
+  try {
+    const result = await commentsCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
 
 // Users
 app.post("/api/post-users", async (req, res) => {
@@ -151,7 +203,7 @@ app.post("/post-productAttribute", async (req, res) => {
   }
 });
 
-app.get("/get-productAttributes", async (req, res) => {
+app.get("/find-productAttributes", async (req, res) => {
   try {
     const result = await productAttributeCollection.find().toArray();
 
@@ -180,6 +232,116 @@ app.get("/find-productReview", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
+
+
+// ------------------ All products  ------------------
+
+// ---------- Multer Setup ----------
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/products"); // save in uploads/products
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname)); // unique filename
+  },
+});
+
+const upload = multer({ storage });
+
+// ---------- Routes ----------
+
+
+
+// Handle product with images
+app.post(
+  "/post-products",
+  upload.fields([
+    { name: "mainImage", maxCount: 1 },
+    { name: "galleryImages", maxCount: 10 },
+    { name: "brandLogo", maxCount: 10 }, // <-- added brandLogo
+  ]),
+  async (req, res) => {
+    try {
+      // text fields
+      const {
+        title,
+        productCode,
+        productCategory,
+        productSubCategory,
+        productSize,
+        color,
+        Gender,
+        fit,
+        Sustainability,
+        price,
+        disCountPrice,
+        description,
+        email,
+      } = req.body;
+
+      // Images
+      const mainImage = req.files["mainImage"]
+        ? `/uploads/products/${req.files["mainImage"][0].filename}`
+        : null;
+
+      const galleryImages = req.files["galleryImages"]
+        ? req.files["galleryImages"].map(
+            (file) => `/uploads/products/${file.filename}`
+          )
+        : [];
+
+      const brandLogo = req.files["brandLogo"]
+        ? req.files["brandLogo"].map(
+            (file) => `/uploads/products/${file.filename}`
+          )
+        : [];
+
+      // final data
+      const productData = {
+        title,
+        productCode,
+        productCategory,
+        productSubCategory,
+        productSize,
+        color,
+        Gender,
+        fit,
+        Sustainability,
+        price: Number(price),
+        disCountPrice: disCountPrice ? Number(disCountPrice) : null,
+        description,
+        email,
+        mainImage,
+        galleryImages,
+        brandLogo, // <-- add brandLogo here
+        createdAt: new Date(),
+      };
+
+      const result = await productsCollection.insertOne(productData);
+
+      res.send({ success: true, product: productData, result });
+    } catch (err) {
+      console.error(" Error saving product:", err);
+      res.status(500).send({ success: false, error: err.message });
+    }
+  }
+);
+
+
+
+
+app.get("/find-products", async (req, res) => {
+  try {
+    const result = await productsCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+
+
 
 // ---------------- START SERVER ----------------
 app.listen(port, () => {
