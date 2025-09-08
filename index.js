@@ -42,7 +42,7 @@ async function run() {
     addressCollection = Db.collection('address');
     blogsCollection = Db.collection('blogs');
     commentsCollection = Db.collection('comments');
-    productAttributeCollection = Db.collection('Product-Collections');
+    productAttributeCollection = Db.collection('Product-Attributes');
     productReviewCollection = Db.collection('Product-Reviews');
     productsCollection = Db.collection('all-products');
 
