@@ -23,6 +23,8 @@ const client = new MongoClient(uri, {
   },
 });
 
+let sizeChartsCollection;
+let bannersCollection; 
 let ordersCollection;
 let usersCollection;
 let addressCollection;
@@ -38,6 +40,8 @@ async function run() {
     await client.connect();
     const Db = client.db("Ayira-Database");
 
+   sizeChartsCollection = Db.collection('sizeCharts');
+    bannersCollection = Db.collection('banners'); 
     ordersCollection = Db.collection('orders');
     usersCollection = Db.collection('All-Users');
     addressCollection = Db.collection('address');
@@ -96,6 +100,33 @@ const blogStorage = multer.diskStorage({
   },
 });
 const uploadBlog = multer({ storage: blogStorage });
+
+
+// --- NEW: Multer configuration for Banners ---
+const bannerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/banners"); // Save in a dedicated 'banners' folder
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+const bannerUpload = multer({ storage: bannerStorage });
+
+
+// 3. ADD a new multer configuration for size chart uploads
+const sizeChartStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/size_charts"); // Use a specific folder
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+const uploadSizeChart = multer({ storage: sizeChartStorage });
+
 
 // Create blog
 app.post("/blogs", uploadBlog.single("image"), async (req, res) => {
@@ -308,26 +339,6 @@ app.get('/comments', async (req, res) => {
   }
 });
 
-// ---------------- Users ----------------
-app.post("/api/post-users", async (req, res) => {
-  try {
-    const user = req.body;
-    const query = { email: user.email };
-    const userAlreadyExist = await usersCollection.findOne(query);
-
-    if (userAlreadyExist) {
-      return res.send({
-        message: "You are already registered. Please log in.",
-        insertedId: null,
-      });
-    }
-
-    const result = await usersCollection.insertOne(user);
-    res.send(result);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
-});
 
 app.get("/api/find-all-users", async (req, res) => {
   try {
@@ -535,6 +546,112 @@ app.get("/find-productReview", async (req, res) => {
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
+});
+
+
+// --- NEW: Banner Management API Routes ---
+// GET all banner slides
+app.get("/banners", async (req, res) => {
+  try {
+    const result = await bannersCollection.find().sort({ createdAt: -1 }).toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// POST a new banner slide (with image upload)
+app.post("/banners", bannerUpload.single('image'), async (req, res) => {
+  try {
+    const { subtitle, title1, title2, titleBold } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).send({ success: false, error: "Image file is required." });
+    }
+
+    const imagePath = `/uploads/banners/${req.file.filename}`;
+
+    const newBannerData = {
+      subtitle,
+      title1,
+      title2,
+      titleBold,
+      image: imagePath,
+      createdAt: new Date(),
+    };
+
+    const result = await bannersCollection.insertOne(newBannerData);
+    res.send({ success: true, result });
+
+  } catch (err) {
+    console.error("Error saving banner:", err);
+    res.status(500).send({ success: false, error: err.message });
+  }
+});
+
+// DELETE a banner slide by ID
+app.delete("/banners/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await bannersCollection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 0) {
+            return res.status(404).send({ success: false, error: "Banner not found." });
+        }
+        res.send({ success: true, message: "Banner deleted." });
+    } catch (err) {
+        res.status(500).send({ success: false, error: err.message });
+    }
+});
+// ----------------------------------------------------
+
+
+
+// GET all size chart images
+app.get("/size-charts", async (req, res) => {
+  try {
+    const result = await sizeChartsCollection.find().sort({ createdAt: -1 }).toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// POST a new size chart image
+app.post("/size-charts", uploadSizeChart.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).send({ success: false, error: "Image file is required." });
+    }
+
+    const imagePath = `/uploads/size_charts/${req.file.filename}`;
+
+    const newSizeChart = {
+      src: imagePath,
+      alt: req.body.alt || 'Size Chart Image', // Optional alt text
+      createdAt: new Date(),
+    };
+
+    const result = await sizeChartsCollection.insertOne(newSizeChart);
+    res.send({ success: true, result });
+
+  } catch (err) {
+    console.error("Error saving size chart:", err);
+    res.status(500).send({ success: false, error: err.message });
+  }
+});
+
+// DELETE a size chart image by ID
+app.delete("/size-charts/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await sizeChartsCollection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 0) {
+            return res.status(404).send({ success: false, error: "Size chart not found." });
+        }
+        res.send({ success: true, message: "Size chart deleted." });
+    } catch (err) {
+        res.status(500).send({ success: false, error: err.message });
+    }
 });
 
 // ---------------- START SERVER ----------------
