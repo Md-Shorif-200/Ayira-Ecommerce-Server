@@ -42,7 +42,7 @@ async function run() {
     addressCollection = Db.collection('address');
     blogsCollection = Db.collection('blogs');
     commentsCollection = Db.collection('comments');
-    productAttributeCollection = Db.collection('Product-Collections');
+    productAttributeCollection = Db.collection('Product-Attributes');
     productReviewCollection = Db.collection('Product-Reviews');
     productsCollection = Db.collection('all-products');
 
@@ -100,24 +100,6 @@ app.get('/blogs', async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
-// delete blog
-  app.delete("/blogs/:id", async (req, res) => {
-    const id = req.params.id;
-    const result = await blogsCollection.deleteOne({ _id: new ObjectId(id) });
-    res.send(result);
-  });
-
-  // update blog
-  app.put("/blogs/:id", async (req, res) => {
-    const id = req.params.id;
-    const updatedBlog = req.body;
-    const result = await blogsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updatedBlog }
-    );
-    res.send(result);
-  });
-
 
 // blog page comment
 
@@ -288,7 +270,7 @@ app.post(
         productCategory,
         productSubCategory,
         productSize,
-        color,
+        colors,
         Gender,
         fit,
         Sustainability,
@@ -297,6 +279,11 @@ app.post(
         description,
         email,
       } = req.body;
+
+
+          // Parse colors JSON string into array
+      const productColors = colors ? JSON.parse(colors) : [];
+
 
       // Images
       const mainImage = req.files["mainImage"]
@@ -309,11 +296,11 @@ app.post(
           )
         : [];
 
-      const brandLogo = req.files["brandLogo"]
-        ? req.files["brandLogo"].map(
-            (file) => `/uploads/products/${file.filename}`
-          )
-        : [];
+// Brand Logo (multiple)
+const brandLogo = req.files["brandLogo"]
+  ? req.files["brandLogo"].map((file) => `/uploads/products/${file.filename}`)
+  : [];
+
 
       // final data
       const productData = {
@@ -322,7 +309,7 @@ app.post(
         productCategory,
         productSubCategory,
         productSize,
-        color,
+        productColors,
         Gender,
         fit,
         Sustainability,
