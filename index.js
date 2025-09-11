@@ -23,6 +23,7 @@ const client = new MongoClient(uri, {
   },
 });
 
+let bannersCollection; 
 let ordersCollection;
 let usersCollection;
 let addressCollection;
@@ -38,6 +39,7 @@ async function run() {
     await client.connect();
     const Db = client.db("Ayira-Database");
 
+    bannersCollection = Db.collection('banners'); // <-- ADD THIS LINE
     ordersCollection = Db.collection('orders');
     usersCollection = Db.collection('All-Users');
     addressCollection = Db.collection('address');
@@ -122,6 +124,18 @@ app.post("/blogs", uploadBlog.single("image"), async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// --- NEW: Multer configuration for Banners ---
+const bannerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/banners"); // Save in a dedicated 'banners' folder
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+const bannerUpload = multer({ storage: bannerStorage });
 
 
 // Get all blogs
@@ -214,7 +228,7 @@ app.get("/categories", async (req, res) => {
 
 
 // NEW: Get a single user's data by email (for auth context)
-app.get('/api/user/:email', async (req, res) => {
+app.get('/user/:email', async (req, res) => {
     try {
         const email = req.params.email;
         const query = { email: email };
@@ -476,6 +490,61 @@ app.get("/find-productReview", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
+
+// --- NEW: Banner Management API Routes ---
+// GET all banner slides
+app.get("/banners", async (req, res) => {
+  try {
+    const result = await bannersCollection.find().sort({ createdAt: -1 }).toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// POST a new banner slide (with image upload)
+app.post("/banners", bannerUpload.single('image'), async (req, res) => {
+  try {
+    const { subtitle, title1, title2, titleBold } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).send({ success: false, error: "Image file is required." });
+    }
+
+    const imagePath = `/uploads/banners/${req.file.filename}`;
+
+    const newBannerData = {
+      subtitle,
+      title1,
+      title2,
+      titleBold,
+      image: imagePath,
+      createdAt: new Date(),
+    };
+
+    const result = await bannersCollection.insertOne(newBannerData);
+    res.send({ success: true, result });
+
+  } catch (err) {
+    console.error("Error saving banner:", err);
+    res.status(500).send({ success: false, error: err.message });
+  }
+});
+
+// DELETE a banner slide by ID
+app.delete("/banners/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await bannersCollection.deleteOne({ _id: new ObjectId(id) });
+        if (result.deletedCount === 0) {
+            return res.status(404).send({ success: false, error: "Banner not found." });
+        }
+        res.send({ success: true, message: "Banner deleted." });
+    } catch (err) {
+        res.status(500).send({ success: false, error: err.message });
+    }
+});
+// ----------------------------------------------------
 
 // ---------------- START SERVER ----------------
 app.listen(port, () => {
