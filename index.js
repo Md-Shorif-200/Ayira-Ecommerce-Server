@@ -338,77 +338,6 @@ app.get("/api/find-all-users", async (req, res) => {
   }
 });
 
-
-
-// NEW: Get a single user's data by email (for auth context)
-app.get('/user/:email', async (req, res) => {
-    try {
-        const email = req.params.email;
-        const query = { email: email };
-        const user = await usersCollection.findOne(query);
-        if (!user) {
-            return res.status(404).send({ error: 'User not found' });
-        }
-        res.send(user);
-    } catch (err) {
-        res.status(500).send({ error: err.message });
-    }
-});
-
-// NEW: Update a user's role and permissions
-app.patch("/api/users/:id/role", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { role, permissions } = req.body;
-
-    if (!role) {
-      return res.status(400).send({ error: "Role is required." });
-    }
-
-    const filter = { _id: new ObjectId(id) };
-    const updateDoc = {
-      $set: {
-        role: role,
-        permissions: permissions || [],
-      },
-    };
-
-    const result = await usersCollection.updateOne(filter, updateDoc);
-
-    if (result.matchedCount === 0) {
-      return res.status(404).send({ error: "User not found." });
-    }
-
-    res.send({ success: true, message: "User role updated successfully.", result });
-
-  } catch (err) {
-    console.error("Error updating user role:", err);
-    res.status(500).send({ error: err.message });
-  }
-});
-
-// NEW: Endpoint to DELETE a user by ID
-app.delete('/api/users/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const filter = { _id: new ObjectId(id) };
-        const result = await usersCollection.deleteOne(filter);
-
-        if (result.deletedCount === 0) {
-            return res.status(404).send({ error: "User not found." });
-        }
-        
-        res.send({ success: true, message: "User deleted successfully." });
-
-    } catch (err) {
-        console.error("Error deleting user:", err);
-        res.status(500).send({ error: err.message });
-    }
-});
-
-
-
-
 // ---------------- Address ----------------
 app.post("/address", async (req, res) => {
   try {
@@ -443,23 +372,58 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Handle product with images
+
+// ---------- Routes ----------
+
+
+
+// Handle product with images and files
 app.post(
   "/post-products",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
     { name: "galleryImages", maxCount: 10 },
     { name: "brandLogo", maxCount: 10 },
+
+    { name: "mainPdfs", maxCount: 10 }, // <-- Added mainPdfs for PDF uploads
   ]),
   async (req, res) => {
     try {
+      // text fields and stringified JSON from the form
       const {
-        title, productCode, productCategory, productSubCategory,
-        productSize, colors, Gender, fit, Sustainability,
-        price, disCountPrice, description, email,
+        title,
+        productCode,
+        GSM_Code, // <-- New field
+        productCategory,
+        productSubCategory,
+        productSize,
+        colors,
+        Gender,
+        fit,
+        Sustainability,
+        price,
+        disCountPrice,
+        email,
+        availabelVarients, // <-- New field (stringified JSON)
+        metaTitle,         // <-- New field
+        metaDescription,   // <-- New field
+        description,       // rich description (stringified JSON)
+        printingEmbroidery, // <-- New field (stringified JSON)
+        textileCare,       // <-- New field (stringified JSON)
       } = req.body;
 
+
+      // Parse stringified JSON fields into objects/arrays
+
       const productColors = colors ? JSON.parse(colors) : [];
+      const parsedVariants = availabelVarients ? JSON.parse(availabelVarients) : [];
+      const parsedDescription = description ? JSON.parse(description) : null;
+      const parsedPrintingEmbroidery = printingEmbroidery ? JSON.parse(printingEmbroidery) : null;
+      const parsedTextileCare = textileCare ? JSON.parse(textileCare) : null;
+
+
+
+      // Handle uploaded files
 
       const mainImage = req.files["mainImage"]
         ? `/uploads/products/${req.files["mainImage"][0].filename}`
@@ -470,22 +434,47 @@ app.post(
         : [];
 
       const brandLogo = req.files["brandLogo"]
-        ? req.files["brandLogo"].map(file => `/uploads/products/${file.filename}`)
+
+        ? req.files["brandLogo"].map((file) => `/uploads/products/${file.filename}`)
         : [];
 
+      const mainPdfs = req.files["mainPdfs"]
+        ? req.files["mainPdfs"].map((file) => `/uploads/products/${file.filename}`)
+        : [];
+
+
+      // Construct the final data object to be saved in MongoDB
       const productData = {
-        title, productCode, productCategory, productSubCategory,
-        productSize, productColors, Gender, fit, Sustainability,
+        title,
+        metaTitle,
+        metaDescription,
+        productCode,
+        GSM_Code,
+        productCategory,
+        productSubCategory,
+        productSize, // Note: This might be a general size range, variants handle specifics
+        productColors, // General colors available
+        availabelVarients: parsedVariants, // Specific color/size combinations
+        Gender,
+        fit,
+        Sustainability,
         price: Number(price),
         disCountPrice: disCountPrice ? Number(disCountPrice) : null,
-        description, email,
-        mainImage, galleryImages, brandLogo,
+        description: parsedDescription,
+        printingEmbroidery: parsedPrintingEmbroidery,
+        textileCare: parsedTextileCare,
+        email,
+        mainImage,
+        galleryImages,
+        brandLogo,
+        mainPdfs,
+
         createdAt: new Date(),
       };
 
       const result = await productsCollection.insertOne(productData);
 
-      res.send({ success: true, product: productData, result });
+      res.send({ success: true, message: "Product created successfully", insertedId: result.insertedId });
     } catch (err) {
       console.error("Error saving product:", err);
       res.status(500).send({ success: false, error: err.message });
@@ -547,142 +536,6 @@ app.get("/find-productReview", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
-
-
-// ------------------ All products  ------------------
-
-// ---------- Multer Setup ----------
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/products"); // save in uploads/products
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname)); // unique filename
-  },
-});
-
-const upload = multer({ storage });
-
-// ---------- Routes ----------
-
-
-
-// Handle product with images and files
-app.post(
-  "/post-products",
-  upload.fields([
-    { name: "mainImage", maxCount: 1 },
-    { name: "galleryImages", maxCount: 10 },
-    { name: "brandLogo", maxCount: 10 },
-    { name: "mainPdfs", maxCount: 10 }, // <-- Added mainPdfs for PDF uploads
-  ]),
-  async (req, res) => {
-    try {
-      // text fields and stringified JSON from the form
-      const {
-        title,
-        productCode,
-        GSM_Code, // <-- New field
-        productCategory,
-        productSubCategory,
-        productSize,
-        colors,
-        Gender,
-        fit,
-        Sustainability,
-        price,
-        disCountPrice,
-        email,
-        availabelVarients, // <-- New field (stringified JSON)
-        metaTitle,         // <-- New field
-        metaDescription,   // <-- New field
-        description,       // rich description (stringified JSON)
-        printingEmbroidery, // <-- New field (stringified JSON)
-        textileCare,       // <-- New field (stringified JSON)
-      } = req.body;
-
-
-      // Parse stringified JSON fields into objects/arrays
-      const productColors = colors ? JSON.parse(colors) : [];
-      const parsedVariants = availabelVarients ? JSON.parse(availabelVarients) : [];
-      const parsedDescription = description ? JSON.parse(description) : null;
-      const parsedPrintingEmbroidery = printingEmbroidery ? JSON.parse(printingEmbroidery) : null;
-      const parsedTextileCare = textileCare ? JSON.parse(textileCare) : null;
-
-
-      // Handle uploaded files
-      const mainImage = req.files["mainImage"]
-        ? `/uploads/products/${req.files["mainImage"][0].filename}`
-        : null;
-
-      const galleryImages = req.files["galleryImages"]
-        ? req.files["galleryImages"].map(
-            (file) => `/uploads/products/${file.filename}`
-          )
-        : [];
-
-      const brandLogo = req.files["brandLogo"]
-        ? req.files["brandLogo"].map((file) => `/uploads/products/${file.filename}`)
-        : [];
-
-      const mainPdfs = req.files["mainPdfs"]
-        ? req.files["mainPdfs"].map((file) => `/uploads/products/${file.filename}`)
-        : [];
-
-
-      // Construct the final data object to be saved in MongoDB
-      const productData = {
-        title,
-        metaTitle,
-        metaDescription,
-        productCode,
-        GSM_Code,
-        productCategory,
-        productSubCategory,
-        productSize, // Note: This might be a general size range, variants handle specifics
-        productColors, // General colors available
-        availabelVarients: parsedVariants, // Specific color/size combinations
-        Gender,
-        fit,
-        Sustainability,
-        price: Number(price),
-        disCountPrice: disCountPrice ? Number(disCountPrice) : null,
-        description: parsedDescription,
-        printingEmbroidery: parsedPrintingEmbroidery,
-        textileCare: parsedTextileCare,
-        email,
-        mainImage,
-        galleryImages,
-        brandLogo,
-        mainPdfs,
-        createdAt: new Date(),
-      };
-
-      const result = await productsCollection.insertOne(productData);
-
-      res.send({ success: true, message: "Product created successfully", insertedId: result.insertedId });
-    } catch (err) {
-      console.error(" Error saving product:", err);
-      res.status(500).send({ success: false, error: err.message });
-    }
-  }
-);
-
-
-
-
-app.get("/find-products", async (req, res) => {
-  try {
-    const result = await productsCollection.find().toArray();
-    res.send(result);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
-});
-
-
-
 
 // ---------------- START SERVER ----------------
 app.listen(port, () => {
