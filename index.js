@@ -253,20 +253,22 @@ const upload = multer({ storage });
 
 
 
-// Handle product with images
+// Handle product with images and files
 app.post(
   "/post-products",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
     { name: "galleryImages", maxCount: 10 },
-    { name: "brandLogo", maxCount: 10 }, // <-- added brandLogo
+    { name: "brandLogo", maxCount: 10 },
+    { name: "mainPdfs", maxCount: 10 }, // <-- Added mainPdfs for PDF uploads
   ]),
   async (req, res) => {
     try {
-      // text fields
+      // text fields and stringified JSON from the form
       const {
         title,
         productCode,
+        GSM_Code, // <-- New field
         productCategory,
         productSubCategory,
         productSize,
@@ -276,16 +278,25 @@ app.post(
         Sustainability,
         price,
         disCountPrice,
-        description,
         email,
+        availabelVarients, // <-- New field (stringified JSON)
+        metaTitle,         // <-- New field
+        metaDescription,   // <-- New field
+        description,       // rich description (stringified JSON)
+        printingEmbroidery, // <-- New field (stringified JSON)
+        textileCare,       // <-- New field (stringified JSON)
       } = req.body;
 
 
-          // Parse colors JSON string into array
+      // Parse stringified JSON fields into objects/arrays
       const productColors = colors ? JSON.parse(colors) : [];
+      const parsedVariants = availabelVarients ? JSON.parse(availabelVarients) : [];
+      const parsedDescription = description ? JSON.parse(description) : null;
+      const parsedPrintingEmbroidery = printingEmbroidery ? JSON.parse(printingEmbroidery) : null;
+      const parsedTextileCare = textileCare ? JSON.parse(textileCare) : null;
 
 
-      // Images
+      // Handle uploaded files
       const mainImage = req.files["mainImage"]
         ? `/uploads/products/${req.files["mainImage"][0].filename}`
         : null;
@@ -296,36 +307,46 @@ app.post(
           )
         : [];
 
-// Brand Logo (multiple)
-const brandLogo = req.files["brandLogo"]
-  ? req.files["brandLogo"].map((file) => `/uploads/products/${file.filename}`)
-  : [];
+      const brandLogo = req.files["brandLogo"]
+        ? req.files["brandLogo"].map((file) => `/uploads/products/${file.filename}`)
+        : [];
+
+      const mainPdfs = req.files["mainPdfs"]
+        ? req.files["mainPdfs"].map((file) => `/uploads/products/${file.filename}`)
+        : [];
 
 
-      // final data
+      // Construct the final data object to be saved in MongoDB
       const productData = {
         title,
+        metaTitle,
+        metaDescription,
         productCode,
+        GSM_Code,
         productCategory,
         productSubCategory,
-        productSize,
-        productColors,
+        productSize, // Note: This might be a general size range, variants handle specifics
+        productColors, // General colors available
+        availabelVarients: parsedVariants, // Specific color/size combinations
         Gender,
         fit,
         Sustainability,
         price: Number(price),
         disCountPrice: disCountPrice ? Number(disCountPrice) : null,
-        description,
+        description: parsedDescription,
+        printingEmbroidery: parsedPrintingEmbroidery,
+        textileCare: parsedTextileCare,
         email,
         mainImage,
         galleryImages,
-        brandLogo, // <-- add brandLogo here
+        brandLogo,
+        mainPdfs,
         createdAt: new Date(),
       };
 
       const result = await productsCollection.insertOne(productData);
 
-      res.send({ success: true, product: productData, result });
+      res.send({ success: true, message: "Product created successfully", insertedId: result.insertedId });
     } catch (err) {
       console.error(" Error saving product:", err);
       res.status(500).send({ success: false, error: err.message });
