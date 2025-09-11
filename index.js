@@ -31,7 +31,7 @@ let commentsCollection;
 let productAttributeCollection;
 let productReviewCollection;
 let productsCollection;
-
+let categoriesCollection;
 async function run() {
   try {
     await client.connect();
@@ -45,6 +45,7 @@ async function run() {
     productAttributeCollection = Db.collection('Product-Attributes');
     productReviewCollection = Db.collection('Product-Reviews');
     productsCollection = Db.collection('all-products');
+    categoriesCollection = Db.collection('categories')
 
     await client.db("admin").command({ ping: 1 });
     console.log(" Connected to MongoDB!");
@@ -99,6 +100,37 @@ app.get('/blogs', async (req, res) => {
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
+});
+
+// blog - add category 
+
+
+// Add new category
+app.post("/categories", async (req, res) => {
+  try {
+    const { value } = req.body;
+    if (!value) return res.status(400).send({ error: "Category value is required" });
+
+    const result = await categoriesCollection.insertOne({ value });
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// Get all categories
+app.get("/categories", async (req, res) => {
+  try {
+    const categories = await categoriesCollection.find().toArray();
+    res.send(categories);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+app.delete("/categories/:id", async (req, res) => {
+  const { id } = req.params;
+  const result = await categoriesCollection.deleteOne({ _id: new ObjectId(id) });
+  res.send(result);
 });
 
 // blog page comment
