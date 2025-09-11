@@ -161,8 +161,32 @@ app.delete("/blogs/:id", async (req, res) => {
   res.status(200).end(); 
 });
 
+// MODIFIED: To ensure every new user gets a default role and permissions array
+app.post("/api/post-users", async (req, res) => {
+  try {
+    const user = req.body;
+    const query = { email: user.email };
 
-// ---------------- Categories ----------------
+    const userAlreadyExist = await usersCollection.findOne(query);
+    if (userAlreadyExist) {
+      return res.send({
+        message: "You are already registered. Please log in.",
+        insertedId: null,
+      });
+    }
+
+    const userWithDefaults = {
+      ...user,
+      role: user.role || 'user',
+      permissions: user.permissions || [],
+    };
+
+    const result = await usersCollection.insertOne(userWithDefaults);
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
 
 // Add new category
 app.post("/categories", async (req, res) => {
@@ -171,6 +195,7 @@ app.post("/categories", async (req, res) => {
     if (!value) return res.status(400).send({ error: "Category value is required" });
 
     const result = await categoriesCollection.insertOne({ value });
+
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
@@ -186,6 +211,75 @@ app.get("/categories", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
+
+
+// NEW: Get a single user's data by email (for auth context)
+app.get('/api/user/:email', async (req, res) => {
+    try {
+        const email = req.params.email;
+        const query = { email: email };
+        const user = await usersCollection.findOne(query);
+        if (!user) {
+            return res.status(404).send({ error: 'User not found' });
+        }
+        res.send(user);
+    } catch (err) {
+        res.status(500).send({ error: err.message });
+    }
+});
+
+// NEW: Update a user's role and permissions
+app.patch("/api/users/:id/role", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role, permissions } = req.body;
+
+    if (!role) {
+      return res.status(400).send({ error: "Role is required." });
+    }
+
+    const filter = { _id: new ObjectId(id) };
+    const updateDoc = {
+      $set: {
+        role: role,
+        permissions: permissions || [],
+      },
+    };
+
+    const result = await usersCollection.updateOne(filter, updateDoc);
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ error: "User not found." });
+    }
+
+    res.send({ success: true, message: "User role updated successfully.", result });
+
+  } catch (err) {
+    console.error("Error updating user role:", err);
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// NEW: Endpoint to DELETE a user by ID
+app.delete('/api/users/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const filter = { _id: new ObjectId(id) };
+        const result = await usersCollection.deleteOne(filter);
+
+        if (result.deletedCount === 0) {
+            return res.status(404).send({ error: "User not found." });
+        }
+        
+        res.send({ success: true, message: "User deleted successfully." });
+
+    } catch (err) {
+        console.error("Error deleting user:", err);
+        res.status(500).send({ error: err.message });
+    }
+});
+
+
 
 // Delete category
 app.delete("/categories/:id", async (req, res) => {
