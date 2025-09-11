@@ -32,6 +32,7 @@ let productAttributeCollection;
 let productReviewCollection;
 let productsCollection;
 let categoriesCollection;
+
 async function run() {
   try {
     await client.connect();
@@ -45,12 +46,12 @@ async function run() {
     productAttributeCollection = Db.collection('Product-Attributes');
     productReviewCollection = Db.collection('Product-Reviews');
     productsCollection = Db.collection('all-products');
-    categoriesCollection = Db.collection('categories')
+    categoriesCollection = Db.collection('categories');
 
     await client.db("admin").command({ ping: 1 });
-    console.log(" Connected to MongoDB!");
+    console.log("Connected to MongoDB!");
   } catch (err) {
-    console.error(" DB connection failed:", err);
+    console.error("DB connection failed:", err);
   }
 }
 run().catch(console.dir);
@@ -82,18 +83,49 @@ app.get("/orders", async (req, res) => {
   }
 });
 
-// Blogs
-app.post('/blogs', async (req, res) =>{
-  try{
-    const newBlog = req.body;
-    const result = await blogsCollection.insertOne(newBlog);
-    res.send(result);
-  }catch(err){
-    res.status(500).send({ error: err.message});
-  }
+// ---------------- Blog Routes with Multer ----------------
 
+// Multer setup for blogs
+const blogStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/blogs");
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
 });
-app.get('/blogs', async (req, res) => {
+const uploadBlog = multer({ storage: blogStorage });
+
+// Create blog
+app.post("/blogs", uploadBlog.single("image"), async (req, res) => {
+  try {
+    const { title, category, content, metaTitle, metaDescription } = req.body;
+    const blogImage = req.file ? `/uploads/blogs/${req.file.filename}` : null;
+
+    const blogData = {
+      title,
+      category,
+      content,
+      metaTitle,
+      metaDescription,
+      image: blogImage,
+      createdAt: new Date(),
+    };
+
+    const result = await blogsCollection.insertOne(blogData);
+
+    // Always return JSON
+    res.json({ success: true, blog: blogData, result });
+  } catch (err) {
+    console.error("Error saving blog:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+// Get all blogs
+app.get("/blogs", async (req, res) => {
   try {
     const result = await blogsCollection.find().toArray();
     res.send(result);
@@ -102,8 +134,35 @@ app.get('/blogs', async (req, res) => {
   }
 });
 
-// blog - add category 
+app.put("/blogs/:id", uploadBlog.single("image"), async (req, res) => {
+  try {
+    const { title, category, content, metaTitle, metaDescription } = req.body;
+    const blogImage = req.file ? `/uploads/blogs/${req.file.filename}` : req.body.existingImage;
 
+    const updatedBlog = {
+      title, category, content, metaTitle, metaDescription, image: blogImage
+    };
+
+    const result = await blogsCollection.updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: updatedBlog }
+    );
+
+    res.json({ success: true, updatedBlog, result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+app.delete("/blogs/:id", async (req, res) => {
+  const blogId = req.params.id;
+  await blogsCollection.deleteOne({ _id: new ObjectId(blogId) });
+
+  res.status(200).end(); 
+});
+
+
+// ---------------- Categories ----------------
 
 // Add new category
 app.post("/categories", async (req, res) => {
@@ -127,14 +186,15 @@ app.get("/categories", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
+
+// Delete category
 app.delete("/categories/:id", async (req, res) => {
   const { id } = req.params;
   const result = await categoriesCollection.deleteOne({ _id: new ObjectId(id) });
   res.send(result);
 });
 
-// blog page comment
-
+// ---------------- Comments ----------------
 app.post('/comments', async (req, res) => {
   try {
     const comment = req.body;
@@ -154,14 +214,13 @@ app.get('/comments', async (req, res) => {
   }
 });
 
-
-// Users
+// ---------------- Users ----------------
 app.post("/api/post-users", async (req, res) => {
   try {
     const user = req.body;
     const query = { email: user.email };
-
     const userAlreadyExist = await usersCollection.findOne(query);
+
     if (userAlreadyExist) {
       return res.send({
         message: "You are already registered. Please log in.",
@@ -185,7 +244,7 @@ app.get("/api/find-all-users", async (req, res) => {
   }
 });
 
-// Address
+// ---------------- Address ----------------
 app.post("/address", async (req, res) => {
   try {
     const address = req.body;
@@ -205,30 +264,90 @@ app.get("/address", async (req, res) => {
   }
 });
 
-// ------------------------- product management related api-------------
+// ---------------- Product Management ----------------
 
+// Multer setup for products
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/products");
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+const upload = multer({ storage });
+
+// Handle product with images
+app.post(
+  "/post-products",
+  upload.fields([
+    { name: "mainImage", maxCount: 1 },
+    { name: "galleryImages", maxCount: 10 },
+    { name: "brandLogo", maxCount: 10 },
+  ]),
+  async (req, res) => {
+    try {
+      const {
+        title, productCode, productCategory, productSubCategory,
+        productSize, colors, Gender, fit, Sustainability,
+        price, disCountPrice, description, email,
+      } = req.body;
+
+      const productColors = colors ? JSON.parse(colors) : [];
+
+      const mainImage = req.files["mainImage"]
+        ? `/uploads/products/${req.files["mainImage"][0].filename}`
+        : null;
+
+      const galleryImages = req.files["galleryImages"]
+        ? req.files["galleryImages"].map(file => `/uploads/products/${file.filename}`)
+        : [];
+
+      const brandLogo = req.files["brandLogo"]
+        ? req.files["brandLogo"].map(file => `/uploads/products/${file.filename}`)
+        : [];
+
+      const productData = {
+        title, productCode, productCategory, productSubCategory,
+        productSize, productColors, Gender, fit, Sustainability,
+        price: Number(price),
+        disCountPrice: disCountPrice ? Number(disCountPrice) : null,
+        description, email,
+        mainImage, galleryImages, brandLogo,
+        createdAt: new Date(),
+      };
+
+      const result = await productsCollection.insertOne(productData);
+
+      res.send({ success: true, product: productData, result });
+    } catch (err) {
+      console.error("Error saving product:", err);
+      res.status(500).send({ success: false, error: err.message });
+    }
+  }
+);
+
+app.get("/find-products", async (req, res) => {
+  try {
+    const result = await productsCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// ---------------- Product Attributes ----------------
 app.post("/post-productAttribute", async (req, res) => {
   try {
     const { key, value } = req.body;
+    if (!key || !value) return res.status(400).send({ error: "Key and value are required" });
 
-    if (!key || !value) {
-      return res.status(400).send({ error: "Key and value are required" });
-    }
-
-    // Dynamic field push
     const result = await productAttributeCollection.updateOne(
       {},
-      {
-        $push: {
-          [`productAttributes.${key}`]: {
-            id: new Date().getTime().toString(), // auto unique id
-            value: value,
-          },
-        },
-      },
+      { $push: { [`productAttributes.${key}`]: { id: new Date().getTime().toString(), value } } },
       { upsert: true }
     );
-
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
@@ -238,14 +357,13 @@ app.post("/post-productAttribute", async (req, res) => {
 app.get("/find-productAttributes", async (req, res) => {
   try {
     const result = await productAttributeCollection.find().toArray();
-
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
 
-// ------------------ Product Reviews ------------------
+// ---------------- Product Reviews ----------------
 app.post("/post-productReview", async (req, res) => {
   try {
     const data = req.body;
@@ -264,121 +382,6 @@ app.get("/find-productReview", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
-
-
-// ------------------ All products  ------------------
-
-// ---------- Multer Setup ----------
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/products"); // save in uploads/products
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname)); // unique filename
-  },
-});
-
-const upload = multer({ storage });
-
-// ---------- Routes ----------
-
-
-
-// Handle product with images
-app.post(
-  "/post-products",
-  upload.fields([
-    { name: "mainImage", maxCount: 1 },
-    { name: "galleryImages", maxCount: 10 },
-    { name: "brandLogo", maxCount: 10 }, // <-- added brandLogo
-  ]),
-  async (req, res) => {
-    try {
-      // text fields
-      const {
-        title,
-        productCode,
-        productCategory,
-        productSubCategory,
-        productSize,
-        colors,
-        Gender,
-        fit,
-        Sustainability,
-        price,
-        disCountPrice,
-        description,
-        email,
-      } = req.body;
-
-
-          // Parse colors JSON string into array
-      const productColors = colors ? JSON.parse(colors) : [];
-
-
-      // Images
-      const mainImage = req.files["mainImage"]
-        ? `/uploads/products/${req.files["mainImage"][0].filename}`
-        : null;
-
-      const galleryImages = req.files["galleryImages"]
-        ? req.files["galleryImages"].map(
-            (file) => `/uploads/products/${file.filename}`
-          )
-        : [];
-
-// Brand Logo (multiple)
-const brandLogo = req.files["brandLogo"]
-  ? req.files["brandLogo"].map((file) => `/uploads/products/${file.filename}`)
-  : [];
-
-
-      // final data
-      const productData = {
-        title,
-        productCode,
-        productCategory,
-        productSubCategory,
-        productSize,
-        productColors,
-        Gender,
-        fit,
-        Sustainability,
-        price: Number(price),
-        disCountPrice: disCountPrice ? Number(disCountPrice) : null,
-        description,
-        email,
-        mainImage,
-        galleryImages,
-        brandLogo, // <-- add brandLogo here
-        createdAt: new Date(),
-      };
-
-      const result = await productsCollection.insertOne(productData);
-
-      res.send({ success: true, product: productData, result });
-    } catch (err) {
-      console.error(" Error saving product:", err);
-      res.status(500).send({ success: false, error: err.message });
-    }
-  }
-);
-
-
-
-
-app.get("/find-products", async (req, res) => {
-  try {
-    const result = await productsCollection.find().toArray();
-    res.send(result);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
-});
-
-
-
 
 // ---------------- START SERVER ----------------
 app.listen(port, () => {
