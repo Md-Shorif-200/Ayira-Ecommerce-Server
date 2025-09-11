@@ -40,7 +40,7 @@ async function run() {
     await client.connect();
     const Db = client.db("Ayira-Database");
 
-   sizeChartsCollection = Db.collection('sizeCharts');
+    sizeChartsCollection = Db.collection('sizeCharts');
     bannersCollection = Db.collection('banners'); 
     ordersCollection = Db.collection('orders');
     usersCollection = Db.collection('All-Users');
@@ -310,8 +310,6 @@ app.delete('/api/users/:id', async (req, res) => {
     }
 });
 
-
-
 // Delete category
 app.delete("/categories/:id", async (req, res) => {
   const { id } = req.params;
@@ -339,7 +337,6 @@ app.get('/comments', async (req, res) => {
   }
 });
 
-
 app.get("/api/find-all-users", async (req, res) => {
   try {
     const result = await usersCollection.find().toArray();
@@ -355,7 +352,8 @@ app.post("/address", async (req, res) => {
     const address = req.body;
     const result = await addressCollection.insertOne(address);
     res.send(result);
-  } catch (err) {
+  } catch (err)
+ {
     res.status(500).send({ error: err.message });
   }
 });
@@ -384,107 +382,45 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
-// ---------- Routes ----------
-
-
-
-// Handle product with images and files
+// Handle product with images and files (CREATE)
 app.post(
   "/post-products",
   upload.fields([
     { name: "mainImage", maxCount: 1 },
     { name: "galleryImages", maxCount: 10 },
     { name: "brandLogo", maxCount: 10 },
-
-    { name: "mainPdfs", maxCount: 10 }, // <-- Added mainPdfs for PDF uploads
+    { name: "mainPdfs", maxCount: 10 },
   ]),
   async (req, res) => {
     try {
-      // text fields and stringified JSON from the form
       const {
-        title,
-        productCode,
-        GSM_Code, // <-- New field
-        productCategory,
-        productSubCategory,
-        productSize,
-        colors,
-        Gender,
-        fit,
-        Sustainability,
-        price,
-        disCountPrice,
-        email,
-        availabelVarients, // <-- New field (stringified JSON)
-        metaTitle,         // <-- New field
-        metaDescription,   // <-- New field
-        description,       // rich description (stringified JSON)
-        printingEmbroidery, // <-- New field (stringified JSON)
-        textileCare,       // <-- New field (stringified JSON)
+        title, productCode, GSM_Code, productCategory, productSubCategory, productSize,
+        colors, Gender, fit, Sustainability, price, disCountPrice, email, availabelVarients,
+        metaTitle, metaDescription, description, printingEmbroidery, textileCare,
       } = req.body;
 
+      // Handle file paths
+      const mainImage = req.files["mainImage"] ? `/uploads/products/${req.files["mainImage"][0].filename}` : null;
+      const galleryImages = req.files["galleryImages"] ? req.files["galleryImages"].map(file => `/uploads/products/${file.filename}`) : [];
+      const brandLogo = req.files["brandLogo"] ? req.files["brandLogo"].map(file => `/uploads/products/${file.filename}`) : [];
+      const mainPdfs = req.files["mainPdfs"] ? req.files["mainPdfs"].map(file => `/uploads/products/${file.filename}`) : [];
 
-      // Parse stringified JSON fields into objects/arrays
-
-      const productColors = colors ? JSON.parse(colors) : [];
-      const parsedVariants = availabelVarients ? JSON.parse(availabelVarients) : [];
-      const parsedDescription = description ? JSON.parse(description) : null;
-      const parsedPrintingEmbroidery = printingEmbroidery ? JSON.parse(printingEmbroidery) : null;
-      const parsedTextileCare = textileCare ? JSON.parse(textileCare) : null;
-
-
-
-      // Handle uploaded files
-
-      const mainImage = req.files["mainImage"]
-        ? `/uploads/products/${req.files["mainImage"][0].filename}`
-        : null;
-
-      const galleryImages = req.files["galleryImages"]
-        ? req.files["galleryImages"].map(file => `/uploads/products/${file.filename}`)
-        : [];
-
-      const brandLogo = req.files["brandLogo"]
-
-        ? req.files["brandLogo"].map((file) => `/uploads/products/${file.filename}`)
-        : [];
-
-      const mainPdfs = req.files["mainPdfs"]
-        ? req.files["mainPdfs"].map((file) => `/uploads/products/${file.filename}`)
-        : [];
-
-
-      // Construct the final data object to be saved in MongoDB
       const productData = {
-        title,
-        metaTitle,
-        metaDescription,
-        productCode,
-        GSM_Code,
-        productCategory,
-        productSubCategory,
-        productSize, // Note: This might be a general size range, variants handle specifics
-        productColors, // General colors available
-        availabelVarients: parsedVariants, // Specific color/size combinations
-        Gender,
-        fit,
-        Sustainability,
+        title, metaTitle, metaDescription, productCode, GSM_Code, productCategory,
+        productSubCategory, productSize, 
+        colors: colors ? JSON.parse(colors) : [], 
+        availabelVarients: availabelVarients ? JSON.parse(availabelVarients) : [], 
+        Gender, fit, Sustainability,
         price: Number(price),
         disCountPrice: disCountPrice ? Number(disCountPrice) : null,
-        description: parsedDescription,
-        printingEmbroidery: parsedPrintingEmbroidery,
-        textileCare: parsedTextileCare,
-        email,
-        mainImage,
-        galleryImages,
-        brandLogo,
-        mainPdfs,
-
+        description: description ? JSON.parse(description) : null,
+        printingEmbroidery: printingEmbroidery ? JSON.parse(printingEmbroidery) : null,
+        textileCare: textileCare ? JSON.parse(textileCare) : null,
+        email, mainImage, galleryImages, brandLogo, mainPdfs,
         createdAt: new Date(),
       };
 
       const result = await productsCollection.insertOne(productData);
-
       res.send({ success: true, message: "Product created successfully", insertedId: result.insertedId });
     } catch (err) {
       console.error("Error saving product:", err);
@@ -492,6 +428,125 @@ app.post(
     }
   }
 );
+
+
+// --- CORRECTED: UPDATE a product by ID (PATCH) ---
+app.patch(
+  "/update-product/:id",
+  upload.fields([
+    { name: "mainImage", maxCount: 1 },
+    { name: "galleryImages", maxCount: 10 },
+    { name: "brandLogo", maxCount: 10 },
+    { name: "mainPdfs", maxCount: 10 },
+  ]),
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const filter = { _id: new ObjectId(id) };
+
+      // Fetch the existing product to preserve old file paths if no new files are uploaded
+      const existingProduct = await productsCollection.findOne(filter);
+      if (!existingProduct) {
+        return res.status(404).send({ success: false, error: "Product not found." });
+      }
+
+      // Start building the update object with text fields from req.body
+      const updateFields = { ...req.body };
+      
+      // 1. Process and parse JSON string fields from the form
+      const fieldsToParse = ['colors', 'availabelVarients', 'description', 'printingEmbroidery', 'textileCare'];
+      fieldsToParse.forEach(field => {
+        if (updateFields[field] && typeof updateFields[field] === 'string') {
+          try {
+            updateFields[field] = JSON.parse(updateFields[field]);
+          } catch (e) {
+            console.warn(`Could not parse JSON for field: ${field}`);
+          }
+        }
+      });
+
+      // 2. Convert price fields to numbers
+      if (updateFields.price) updateFields.price = Number(updateFields.price);
+      if (updateFields.disCountPrice) {
+        updateFields.disCountPrice = Number(updateFields.disCountPrice);
+      } else if (updateFields.disCountPrice === '' || updateFields.disCountPrice === null) {
+        updateFields.disCountPrice = null;
+      }
+
+      // 3. Handle file updates
+      // Check for new mainImage, otherwise keep the existing one
+      if (req.files && req.files["mainImage"]) {
+        updateFields.mainImage = `/uploads/products/${req.files["mainImage"][0].filename}`;
+      } else {
+        updateFields.mainImage = existingProduct.mainImage; // Keep the old one
+      }
+
+      // Check for new galleryImages, otherwise keep the existing ones
+      if (req.files && req.files["galleryImages"]?.length > 0) {
+        updateFields.galleryImages = req.files["galleryImages"].map(file => `/uploads/products/${file.filename}`);
+      } else {
+        updateFields.galleryImages = existingProduct.galleryImages; // Keep the old ones
+      }
+      
+      // Check for new brandLogo, otherwise keep the existing ones
+      if (req.files && req.files["brandLogo"]?.length > 0) {
+          updateFields.brandLogo = req.files["brandLogo"].map(file => `/uploads/products/${file.filename}`);
+      } else {
+          updateFields.brandLogo = existingProduct.brandLogo; // Keep the old ones
+      }
+
+      // Check for new mainPdfs, otherwise keep the existing ones
+      if (req.files && req.files["mainPdfs"]?.length > 0) {
+          updateFields.mainPdfs = req.files["mainPdfs"].map(file => `/uploads/products/${file.filename}`);
+      } else {
+          updateFields.mainPdfs = existingProduct.mainPdfs; // Keep the old ones
+      }
+
+      // Add updatedAt timestamp
+      updateFields.updatedAt = new Date();
+
+      // 4. Perform the update operation in MongoDB
+      const result = await productsCollection.updateOne(
+        filter,
+        { $set: updateFields }
+      );
+
+      res.send({ success: true, message: "Product updated successfully", result });
+
+    } catch (err) {
+      console.error("Error updating product:", err);
+      res.status(500).send({ success: false, error: err.message });
+    }
+  }
+);
+
+
+
+
+// ------------------- DELETE PRODUCT API -------------------
+app.delete("/products/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid product ID" });
+    }
+
+    const query = { _id:  new ObjectId(id) };
+    const result = await productsCollection.deleteOne(query);
+
+    if (result.deletedCount === 1) {
+      res.status(200).json({ message: "Product deleted successfully" });
+    } else {
+      res.status(404).json({ message: "Product not found" });
+    }
+  } catch (error) {
+    console.error(" Delete Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+
 
 app.get("/find-products", async (req, res) => {
   try {
