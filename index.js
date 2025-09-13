@@ -89,17 +89,17 @@ app.get("/orders", async (req, res) => {
 
 // ---------------- Blog Routes with Multer ----------------
 
-// Multer setup for blogs
-const blogStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/blogs");
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
-const uploadBlog = multer({ storage: blogStorage });
+// // Multer setup for blogs
+// const blogStorage = multer.diskStorage({
+//   destination: (req, file, cb) => {
+//     cb(null, "uploads/blogs");
+//   },
+//   filename: (req, file, cb) => {
+//     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+//     cb(null, uniqueSuffix + path.extname(file.originalname));
+//   },
+// });
+// const uploadBlog = multer({ storage: blogStorage });
 
 
 // --- NEW: Multer configuration for Banners ---
@@ -128,6 +128,21 @@ const sizeChartStorage = multer.diskStorage({
 const uploadSizeChart = multer({ storage: sizeChartStorage });
 
 
+
+// ---------------- Blog Routes with Multer ----------------
+
+// Multer setup for blogs
+const blogStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/blogs");
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  },
+});
+const uploadBlog = multer({ storage: blogStorage });
+
 // Create blog
 app.post("/blogs", uploadBlog.single("image"), async (req, res) => {
   try {
@@ -137,7 +152,7 @@ app.post("/blogs", uploadBlog.single("image"), async (req, res) => {
     const blogData = {
       title,
       category,
-      content,
+      content: content ? JSON.parse(content) : null,
       metaTitle,
       metaDescription,
       image: blogImage,
@@ -145,54 +160,82 @@ app.post("/blogs", uploadBlog.single("image"), async (req, res) => {
     };
 
     const result = await blogsCollection.insertOne(blogData);
+ 
+    const newBlog = await blogsCollection.findOne({ _id: result.insertedId });
+    res.status(201).send({ message: "Blog created successfully", blog: newBlog });
 
-    // Always return JSON
-    res.json({ success: true, blog: blogData, result });
+
   } catch (err) {
-    console.error("Error saving blog:", err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error("Error creating blog:", err);
+    res.status(500).send({ success: false, error: err.message });
   }
 });
-
 
 // Get all blogs
 app.get("/blogs", async (req, res) => {
   try {
-    const result = await blogsCollection.find().toArray();
+    const result = await blogsCollection.find().sort({ createdAt: -1 }).toArray();
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
 
+
+
+// Update blog
 app.put("/blogs/:id", uploadBlog.single("image"), async (req, res) => {
   try {
-    const { title, category, content, metaTitle, metaDescription } = req.body;
-    const blogImage = req.file ? `/uploads/blogs/${req.file.filename}` : req.body.existingImage;
+    const { id } = req.params;
+    const { title, category, content, metaTitle, metaDescription, existingImage } = req.body;
+    
+    // যদি নতুন ফাইল আপলোড হয়, সেটি ব্যবহার করুন, নাহলে existingImage ব্যবহার করুন
+    const blogImage = req.file ? `/uploads/blogs/${req.file.filename}` : existingImage;
 
-    const updatedBlog = {
-      title, category, content, metaTitle, metaDescription, image: blogImage
+    const updatedBlogData = {
+      title,
+      category,
+      content: content ? JSON.parse(content) : null,
+      metaTitle,
+      metaDescription,
+      image: blogImage,
+      updatedAt: new Date(),
     };
 
-    const result = await blogsCollection.updateOne(
-      { _id: new ObjectId(req.params.id) },
-      { $set: updatedBlog }
-    );
 
-    res.json({ success: true, updatedBlog, result });
+    const result = await blogsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedBlogData }
+    );
+    
+    if (result.matchedCount === 0) {
+        return res.status(404).send({ success: false, error: "Blog not found." });
+    }
+
+    const updatedBlog = await blogsCollection.findOne({ _id: new ObjectId(id) });
+    res.send({ message: "Blog updated successfully", blog: updatedBlog });
+    // ★★★ শেষ ★★★
+
   } catch (err) {
-    console.error(err);
+    console.error("Error updating blog:", err);
+    res.status(500).send({ success: false, error: err.message });
+  }
+});
+
+app.delete("/blogs/:id", async (req, res) => {
+  try {
+    const blogId = req.params.id;
+
+    await blogsCollection.deleteOne({ _id: new ObjectId(blogId) });
+    res.status(204).end(); 
+  } catch (err) {
+    console.error("Error deleting blog:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
-app.delete("/blogs/:id", async (req, res) => {
-  const blogId = req.params.id;
-  await blogsCollection.deleteOne({ _id: new ObjectId(blogId) });
 
-  res.status(200).end(); 
-});
 
-// MODIFIED: To ensure every new user gets a default role and permissions array
+
 app.post("/api/post-users", async (req, res) => {
   try {
     const user = req.body;
