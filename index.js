@@ -37,7 +37,7 @@ let categoriesCollection;
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const Db = client.db("Ayira-Database");
 
     sizeChartsCollection = Db.collection('sizeCharts');
