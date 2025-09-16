@@ -8,9 +8,18 @@ const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 app.use(express.json());
-app.use(cors());
+// app.use(cors({ origin: "http://localhost:3000" }));
 
-// Serve uploaded images statically
+app.use(cors({
+  origin : [
+ 'http://localhost:3000',
+  'http://localhost:5000',
+ 'https://ayira-ecommerce-main.vercel.app',
+
+  ]
+}))
+
+
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.56yvv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -52,8 +61,8 @@ async function run() {
     productsCollection = Db.collection('all-products');
     categoriesCollection = Db.collection('categories');
 
-    await client.db("admin").command({ ping: 1 });
-    console.log("Connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Connected to MongoDB!");
   } catch (err) {
     console.error("DB connection failed:", err);
   }
@@ -87,25 +96,12 @@ app.get("/orders", async (req, res) => {
   }
 });
 
-// ---------------- Blog Routes with Multer ----------------
-
-// // Multer setup for blogs
-// const blogStorage = multer.diskStorage({
-//   destination: (req, file, cb) => {
-//     cb(null, "uploads/blogs");
-//   },
-//   filename: (req, file, cb) => {
-//     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-//     cb(null, uniqueSuffix + path.extname(file.originalname));
-//   },
-// });
-// const uploadBlog = multer({ storage: blogStorage });
 
 
-// --- NEW: Multer configuration for Banners ---
+
 const bannerStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/banners"); // Save in a dedicated 'banners' folder
+    cb(null, "uploads/banners"); 
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -115,10 +111,9 @@ const bannerStorage = multer.diskStorage({
 const bannerUpload = multer({ storage: bannerStorage });
 
 
-// 3. ADD a new multer configuration for size chart uploads
 const sizeChartStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/size_charts"); // Use a specific folder
+    cb(null, "uploads/size_charts"); 
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -131,7 +126,7 @@ const uploadSizeChart = multer({ storage: sizeChartStorage });
 
 // ---------------- Blog Routes with Multer ----------------
 
-// Multer setup for blogs
+
 const blogStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "uploads/blogs");
@@ -143,7 +138,7 @@ const blogStorage = multer.diskStorage({
 });
 const uploadBlog = multer({ storage: blogStorage });
 
-// Create blog
+
 app.post("/blogs", uploadBlog.single("image"), async (req, res) => {
   try {
     const { title, category, content, metaTitle, metaDescription } = req.body;
@@ -182,14 +177,39 @@ app.get("/blogs", async (req, res) => {
 });
 
 
+app.get("/blogs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({ error: "Invalid blog ID format." });
+    }
+
+    const query = { _id: new ObjectId(id) };
+    const blog = await blogsCollection.findOne(query);
+
+   
+    if (!blog) {
+      return res.status(404).send({ error: "Blog not found." });
+    }
+
+    res.send(blog);
+
+  } catch (err) {
+    console.error("Error fetching single blog:", err);
+    res.status(500).send({ error: err.message });
+  }
+});
+
+
 
 // Update blog
 app.put("/blogs/:id", uploadBlog.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     const { title, category, content, metaTitle, metaDescription, existingImage } = req.body;
-    
-    // যদি নতুন ফাইল আপলোড হয়, সেটি ব্যবহার করুন, নাহলে existingImage ব্যবহার করুন
+
     const blogImage = req.file ? `/uploads/blogs/${req.file.filename}` : existingImage;
 
     const updatedBlogData = {
@@ -214,7 +234,7 @@ app.put("/blogs/:id", uploadBlog.single("image"), async (req, res) => {
 
     const updatedBlog = await blogsCollection.findOne({ _id: new ObjectId(id) });
     res.send({ message: "Blog updated successfully", blog: updatedBlog });
-    // ★★★ শেষ ★★★
+
 
   } catch (err) {
     console.error("Error updating blog:", err);
@@ -241,6 +261,9 @@ app.post("/api/post-users", async (req, res) => {
     const user = req.body;
     const query = { email: user.email };
 
+    // console.log(user);
+    
+
     const userAlreadyExist = await usersCollection.findOne(query);
     if (userAlreadyExist) {
       return res.send({
@@ -262,36 +285,16 @@ app.post("/api/post-users", async (req, res) => {
   }
 });
 
-// Add new category
-app.post("/categories", async (req, res) => {
-  try {
-    const { value } = req.body;
-    if (!value) return res.status(400).send({ error: "Category value is required" });
-
-    const result = await categoriesCollection.insertOne({ value });
-
-    res.send(result);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
-});
-
-// Get all categories
-app.get("/categories", async (req, res) => {
-  try {
-    const categories = await categoriesCollection.find().toArray();
-    res.send(categories);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
-});
 
 
-// NEW: Get a single user's data by email (for auth context)
+
 app.get('/api/user/:email', async (req, res) => {
     try {
         const email = req.params.email;
+         console.log(email);
+         
         const query = { email: email };
+         console.log(query)
         const user = await usersCollection.findOne(query);
         if (!user) {
             return res.status(404).send({ error: 'User not found' });
@@ -302,7 +305,7 @@ app.get('/api/user/:email', async (req, res) => {
     }
 });
 
-// NEW: Update a user's role and permissions
+
 app.patch("/api/users/:id/role", async (req, res) => {
   try {
     const { id } = req.params;
@@ -334,7 +337,7 @@ app.patch("/api/users/:id/role", async (req, res) => {
   }
 });
 
-// NEW: Endpoint to DELETE a user by ID
+
 app.delete('/api/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -353,12 +356,38 @@ app.delete('/api/users/:id', async (req, res) => {
     }
 });
 
-// Delete category
+
 app.delete("/categories/:id", async (req, res) => {
   const { id } = req.params;
   const result = await categoriesCollection.deleteOne({ _id: new ObjectId(id) });
   res.send(result);
 });
+
+
+// Add new category
+app.post("/categories", async (req, res) => {
+  try {
+    const { value } = req.body;
+    if (!value) return res.status(400).send({ error: "Category value is required" });
+
+    const result = await categoriesCollection.insertOne({ value });
+
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// Get all categories
+app.get("/categories", async (req, res) => {
+  try {
+    const categories = await categoriesCollection.find().toArray();
+    res.send(categories);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+ 
 
 // ---------------- Comments ----------------
 app.post('/comments', async (req, res) => {
@@ -425,7 +454,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
-// Handle product with images and files (CREATE)
+
 app.post(
   "/post-products",
   upload.fields([
@@ -473,7 +502,6 @@ app.post(
 );
 
 
-// --- CORRECTED: UPDATE a product by ID (PATCH) ---
 app.patch(
   "/update-product/:id",
   upload.fields([
@@ -487,16 +515,15 @@ app.patch(
       const { id } = req.params;
       const filter = { _id: new ObjectId(id) };
 
-      // Fetch the existing product to preserve old file paths if no new files are uploaded
       const existingProduct = await productsCollection.findOne(filter);
       if (!existingProduct) {
         return res.status(404).send({ success: false, error: "Product not found." });
       }
 
-      // Start building the update object with text fields from req.body
+
       const updateFields = { ...req.body };
       
-      // 1. Process and parse JSON string fields from the form
+
       const fieldsToParse = ['colors', 'availabelVarients', 'description', 'printingEmbroidery', 'textileCare'];
       fieldsToParse.forEach(field => {
         if (updateFields[field] && typeof updateFields[field] === 'string') {
@@ -508,7 +535,6 @@ app.patch(
         }
       });
 
-      // 2. Convert price fields to numbers
       if (updateFields.price) updateFields.price = Number(updateFields.price);
       if (updateFields.disCountPrice) {
         updateFields.disCountPrice = Number(updateFields.disCountPrice);
@@ -516,39 +542,37 @@ app.patch(
         updateFields.disCountPrice = null;
       }
 
-      // 3. Handle file updates
-      // Check for new mainImage, otherwise keep the existing one
       if (req.files && req.files["mainImage"]) {
         updateFields.mainImage = `/uploads/products/${req.files["mainImage"][0].filename}`;
       } else {
-        updateFields.mainImage = existingProduct.mainImage; // Keep the old one
+        updateFields.mainImage = existingProduct.mainImage; 
       }
 
-      // Check for new galleryImages, otherwise keep the existing ones
+
       if (req.files && req.files["galleryImages"]?.length > 0) {
         updateFields.galleryImages = req.files["galleryImages"].map(file => `/uploads/products/${file.filename}`);
       } else {
-        updateFields.galleryImages = existingProduct.galleryImages; // Keep the old ones
+        updateFields.galleryImages = existingProduct.galleryImages;
       }
       
-      // Check for new brandLogo, otherwise keep the existing ones
+
       if (req.files && req.files["brandLogo"]?.length > 0) {
           updateFields.brandLogo = req.files["brandLogo"].map(file => `/uploads/products/${file.filename}`);
       } else {
-          updateFields.brandLogo = existingProduct.brandLogo; // Keep the old ones
+          updateFields.brandLogo = existingProduct.brandLogo; 
       }
 
-      // Check for new mainPdfs, otherwise keep the existing ones
+      
       if (req.files && req.files["mainPdfs"]?.length > 0) {
           updateFields.mainPdfs = req.files["mainPdfs"].map(file => `/uploads/products/${file.filename}`);
       } else {
-          updateFields.mainPdfs = existingProduct.mainPdfs; // Keep the old ones
+          updateFields.mainPdfs = existingProduct.mainPdfs;
       }
 
-      // Add updatedAt timestamp
+
       updateFields.updatedAt = new Date();
 
-      // 4. Perform the update operation in MongoDB
+
       const result = await productsCollection.updateOne(
         filter,
         { $set: updateFields }
@@ -647,7 +671,7 @@ app.get("/find-productReview", async (req, res) => {
 });
 
 
-// --- NEW: Banner Management API Routes ---
+
 // GET all banner slides
 app.get("/banners", async (req, res) => {
   try {
@@ -658,7 +682,6 @@ app.get("/banners", async (req, res) => {
   }
 });
 
-// POST a new banner slide (with image upload)
 app.post("/banners", bannerUpload.single('image'), async (req, res) => {
   try {
     const { subtitle, title1, title2, titleBold } = req.body;
@@ -687,7 +710,7 @@ app.post("/banners", bannerUpload.single('image'), async (req, res) => {
   }
 });
 
-// DELETE a banner slide by ID
+
 app.delete("/banners/:id", async (req, res) => {
     try {
         const { id } = req.params;
@@ -704,7 +727,7 @@ app.delete("/banners/:id", async (req, res) => {
 
 
 
-// GET all size chart images
+
 app.get("/size-charts", async (req, res) => {
   try {
     const result = await sizeChartsCollection.find().sort({ createdAt: -1 }).toArray();
@@ -714,7 +737,7 @@ app.get("/size-charts", async (req, res) => {
   }
 });
 
-// POST a new size chart image
+
 app.post("/size-charts", uploadSizeChart.single('image'), async (req, res) => {
   try {
     if (!req.file) {
@@ -725,7 +748,7 @@ app.post("/size-charts", uploadSizeChart.single('image'), async (req, res) => {
 
     const newSizeChart = {
       src: imagePath,
-      alt: req.body.alt || 'Size Chart Image', // Optional alt text
+      alt: req.body.alt || 'Size Chart Image', 
       createdAt: new Date(),
     };
 
@@ -738,7 +761,7 @@ app.post("/size-charts", uploadSizeChart.single('image'), async (req, res) => {
   }
 });
 
-// DELETE a size chart image by ID
+
 app.delete("/size-charts/:id", async (req, res) => {
     try {
         const { id } = req.params;
