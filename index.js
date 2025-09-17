@@ -6,9 +6,15 @@ require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const OpenAI = require("openai");
 
 app.use(express.json());
 app.use(cors());
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 
 // Serve uploaded images statically
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -135,11 +141,11 @@ const blogUploadFields = uploadBlog.fields([
 app.post("/blogs", blogUploadFields, async (req, res) => {
   try {
     // 1. Destructure all new text fields from the request body
-    const { 
-      title, category, content, metaTitle, metaDescription, 
-      shortDescription, note, tags 
+    const {
+      title, category, content, metaTitle, metaDescription,
+      shortDescription, note, tags
     } = req.body;
-    
+
     // 2. Handle files from req.files (plural) for both fields
     const blogImage = req.files && req.files['image'] ? `/uploads/blogs/${req.files['image'][0].filename}` : null;
     const extraBlogImage = req.files && req.files['extraImage'] ? `/uploads/blogs/${req.files['extraImage'][0].filename}` : null;
@@ -160,7 +166,7 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
     };
 
     const result = await blogsCollection.insertOne(blogData);
- 
+
     const newBlog = await blogsCollection.findOne({ _id: result.insertedId });
     res.status(201).send({ message: "Blog created successfully", blog: newBlog });
 
@@ -210,23 +216,23 @@ app.get("/blogs/:id", async (req, res) => {
 app.put("/blogs/:id", blogUploadFields, async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!ObjectId.isValid(id)) {
       return res.status(400).send({ success: false, error: "Invalid blog ID." });
     }
 
     // 1. Destructure all new text fields and existing image paths
-    const { 
+    const {
       title, category, content, metaTitle, metaDescription,
-      shortDescription, note, tags, 
-      existingImage, existingExtraImage 
+      shortDescription, note, tags,
+      existingImage, existingExtraImage
     } = req.body;
-    
+
     // 2. Logic to determine final image paths (new upload vs existing)
-    const blogImage = req.files && req.files['image'] 
-      ? `/uploads/blogs/${req.files['image'][0].filename}` 
+    const blogImage = req.files && req.files['image']
+      ? `/uploads/blogs/${req.files['image'][0].filename}`
       : existingImage || null;
-      
+
     const extraBlogImage = req.files && req.files['extraImage']
       ? `/uploads/blogs/${req.files['extraImage'][0].filename}`
       : existingExtraImage || null;
@@ -235,7 +241,7 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
     const updatedBlogData = {
       title,
       category,
-      content, 
+      content,
       metaTitle,
       metaDescription,
       shortDescription,
@@ -268,7 +274,7 @@ app.delete("/blogs/:id", async (req, res) => {
   try {
     const blogId = req.params.id;
     await blogsCollection.deleteOne({ _id: new ObjectId(blogId) });
-    res.status(204).end(); 
+    res.status(204).end();
   } catch (err) {
     console.error("Error deleting blog:", err);
     res.status(500).json({ success: false, error: err.message });
@@ -324,17 +330,17 @@ app.get("/categories", async (req, res) => {
 });
 
 app.get('/api/user/:email', async (req, res) => {
-    try {
-        const email = req.params.email;
-        const query = { email: email };
-        const user = await usersCollection.findOne(query);
-        if (!user) {
-            return res.status(404).send({ error: 'User not found' });
-        }
-        res.send(user);
-    } catch (err) {
-        res.status(500).send({ error: err.message });
+  try {
+    const email = req.params.email;
+    const query = { email: email };
+    const user = await usersCollection.findOne(query);
+    if (!user) {
+      return res.status(404).send({ error: 'User not found' });
     }
+    res.send(user);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
 });
 
 app.patch("/api/users/:id/role", async (req, res) => {
@@ -363,18 +369,18 @@ app.patch("/api/users/:id/role", async (req, res) => {
 });
 
 app.delete('/api/users/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const filter = { _id: new ObjectId(id) };
-        const result = await usersCollection.deleteOne(filter);
-        if (result.deletedCount === 0) {
-            return res.status(404).send({ error: "User not found." });
-        }
-        res.send({ success: true, message: "User deleted successfully." });
-    } catch (err) {
-        console.error("Error deleting user:", err);
-        res.status(500).send({ error: err.message });
+  try {
+    const { id } = req.params;
+    const filter = { _id: new ObjectId(id) };
+    const result = await usersCollection.deleteOne(filter);
+    if (result.deletedCount === 0) {
+      return res.status(404).send({ error: "User not found." });
     }
+    res.send({ success: true, message: "User deleted successfully." });
+  } catch (err) {
+    console.error("Error deleting user:", err);
+    res.status(500).send({ error: err.message });
+  }
 });
 
 app.delete("/categories/:id", async (req, res) => {
@@ -556,16 +562,16 @@ app.post("/banners", bannerUpload.single('image'), async (req, res) => {
 });
 
 app.delete("/banners/:id", async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await bannersCollection.deleteOne({ _id: new ObjectId(id) });
-        if (result.deletedCount === 0) {
-            return res.status(404).send({ success: false, error: "Banner not found." });
-        }
-        res.send({ success: true, message: "Banner deleted." });
-    } catch (err) {
-        res.status(500).send({ success: false, error: err.message });
+  try {
+    const { id } = req.params;
+    const result = await bannersCollection.deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount === 0) {
+      return res.status(404).send({ success: false, error: "Banner not found." });
     }
+    res.send({ success: true, message: "Banner deleted." });
+  } catch (err) {
+    res.status(500).send({ success: false, error: err.message });
+  }
 });
 
 app.get("/size-charts", async (req, res) => {
@@ -593,17 +599,42 @@ app.post("/size-charts", uploadSizeChart.single('image'), async (req, res) => {
 });
 
 app.delete("/size-charts/:id", async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await sizeChartsCollection.deleteOne({ _id: new ObjectId(id) });
-        if (result.deletedCount === 0) {
-            return res.status(404).send({ success: false, error: "Size chart not found." });
-        }
-        res.send({ success: true, message: "Size chart deleted." });
-    } catch (err) {
-        res.status(500).send({ success: false, error: err.message });
+  try {
+    const { id } = req.params;
+    const result = await sizeChartsCollection.deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount === 0) {
+      return res.status(404).send({ success: false, error: "Size chart not found." });
     }
+    res.send({ success: true, message: "Size chart deleted." });
+  } catch (err) {
+    res.status(500).send({ success: false, error: err.message });
+  }
 });
+
+// ChatGPT route
+app.post("/api/chatgpt", async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    // Use new method
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo", // or "gpt-4o" if you have access
+      messages: [{ role: "user", content: message }],
+    });
+
+    res.json({
+      reply: response.choices[0].message.content,
+    });
+  } catch (error) {
+    console.error("ChatGPT error:", error);
+    res.status(500).json({ error: "Failed to get response from ChatGPT" });
+  }
+});
+
 
 app.listen(port, () => {
   console.log("🚀 ayira server is running on port", port);
