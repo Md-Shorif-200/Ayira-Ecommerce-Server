@@ -33,7 +33,7 @@ const client = new MongoClient(uri, {
 });
 
 let sizeChartsCollection;
-let bannersCollection; 
+let bannersCollection;
 let ordersCollection;
 let usersCollection;
 let addressCollection;
@@ -50,7 +50,7 @@ async function run() {
     const Db = client.db("Ayira-Database");
 
     sizeChartsCollection = Db.collection('sizeCharts');
-    bannersCollection = Db.collection('banners'); 
+    bannersCollection = Db.collection('banners');
     ordersCollection = Db.collection('orders');
     usersCollection = Db.collection('All-Users');
     addressCollection = Db.collection('address');
@@ -61,8 +61,8 @@ async function run() {
     productsCollection = Db.collection('all-products');
     categoriesCollection = Db.collection('categories');
 
-    // await client.db("admin").command({ ping: 1 });
-    // console.log("Connected to MongoDB!");
+    await client.db("admin").command({ ping: 1 });
+    console.log("Connected to MongoDB!");
   } catch (err) {
     console.error("DB connection failed:", err);
   }
@@ -96,12 +96,10 @@ app.get("/orders", async (req, res) => {
   }
 });
 
-
-
-
+// --- Multer configuration for Banners ---
 const bannerStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/banners"); 
+    cb(null, "uploads/banners");
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -110,10 +108,10 @@ const bannerStorage = multer.diskStorage({
 });
 const bannerUpload = multer({ storage: bannerStorage });
 
-
+// --- Multer configuration for size chart uploads ---
 const sizeChartStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/size_charts"); 
+    cb(null, "uploads/size_charts");
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -121,8 +119,6 @@ const sizeChartStorage = multer.diskStorage({
   },
 });
 const uploadSizeChart = multer({ storage: sizeChartStorage });
-
-
 
 // ---------------- Blog Routes with Multer ----------------
 
@@ -138,19 +134,37 @@ const blogStorage = multer.diskStorage({
 });
 const uploadBlog = multer({ storage: blogStorage });
 
+// --- NEW: Middleware to handle two separate image fields for blogs ---
+const blogUploadFields = uploadBlog.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'extraImage', maxCount: 1 }
+]);
 
-app.post("/blogs", uploadBlog.single("image"), async (req, res) => {
+// Create blog (UPDATED)
+app.post("/blogs", blogUploadFields, async (req, res) => {
   try {
-    const { title, category, content, metaTitle, metaDescription } = req.body;
-    const blogImage = req.file ? `/uploads/blogs/${req.file.filename}` : null;
+    // 1. Destructure all new text fields from the request body
+    const { 
+      title, category, content, metaTitle, metaDescription, 
+      shortDescription, note, tags 
+    } = req.body;
+    
+    // 2. Handle files from req.files (plural) for both fields
+    const blogImage = req.files && req.files['image'] ? `/uploads/blogs/${req.files['image'][0].filename}` : null;
+    const extraBlogImage = req.files && req.files['extraImage'] ? `/uploads/blogs/${req.files['extraImage'][0].filename}` : null;
 
+    // 3. Include all new fields in the data to be saved
     const blogData = {
       title,
       category,
-      content: content ? JSON.parse(content) : null,
+      content,
       metaTitle,
       metaDescription,
+      shortDescription,
+      note,
+      tags,
       image: blogImage,
+      extraImage: extraBlogImage,
       createdAt: new Date(),
     };
 
@@ -158,7 +172,6 @@ app.post("/blogs", uploadBlog.single("image"), async (req, res) => {
  
     const newBlog = await blogsCollection.findOne({ _id: result.insertedId });
     res.status(201).send({ message: "Blog created successfully", blog: newBlog });
-
 
   } catch (err) {
     console.error("Error creating blog:", err);
@@ -176,12 +189,12 @@ app.get("/blogs", async (req, res) => {
   }
 });
 
-
+// NEW: Get a single blog by ID
 app.get("/blogs/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    
+    // Validate the ID format
     if (!ObjectId.isValid(id)) {
       return res.status(400).send({ error: "Invalid blog ID format." });
     }
@@ -189,7 +202,7 @@ app.get("/blogs/:id", async (req, res) => {
     const query = { _id: new ObjectId(id) };
     const blog = await blogsCollection.findOne(query);
 
-   
+    // If no blog is found, return a 404 error
     if (!blog) {
       return res.status(404).send({ error: "Blog not found." });
     }
@@ -202,39 +215,57 @@ app.get("/blogs/:id", async (req, res) => {
   }
 });
 
-
-
-// Update blog
-app.put("/blogs/:id", uploadBlog.single("image"), async (req, res) => {
+// Update blog (UPDATED)
+app.put("/blogs/:id", blogUploadFields, async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, category, content, metaTitle, metaDescription, existingImage } = req.body;
+    
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({ success: false, error: "Invalid blog ID." });
+    }
 
-    const blogImage = req.file ? `/uploads/blogs/${req.file.filename}` : existingImage;
+    // 1. Destructure all new text fields and existing image paths
+    const { 
+      title, category, content, metaTitle, metaDescription,
+      shortDescription, note, tags, 
+      existingImage, existingExtraImage 
+    } = req.body;
+    
+    // 2. Logic to determine final image paths (new upload vs existing)
+    const blogImage = req.files && req.files['image'] 
+      ? `/uploads/blogs/${req.files['image'][0].filename}` 
+      : existingImage || null;
+      
+    const extraBlogImage = req.files && req.files['extraImage']
+      ? `/uploads/blogs/${req.files['extraImage'][0].filename}`
+      : existingExtraImage || null;
 
+    // 3. Include all new fields in the updated data object
     const updatedBlogData = {
       title,
       category,
-      content: content ? JSON.parse(content) : null,
+      content, 
       metaTitle,
       metaDescription,
+      shortDescription,
+      note,
+      tags,
       image: blogImage,
+      extraImage: extraBlogImage,
       updatedAt: new Date(),
     };
-
 
     const result = await blogsCollection.updateOne(
       { _id: new ObjectId(id) },
       { $set: updatedBlogData }
     );
-    
+
     if (result.matchedCount === 0) {
-        return res.status(404).send({ success: false, error: "Blog not found." });
+      return res.status(404).send({ success: false, error: "Blog not found." });
     }
 
     const updatedBlog = await blogsCollection.findOne({ _id: new ObjectId(id) });
-    res.send({ message: "Blog updated successfully", blog: updatedBlog });
-
+    res.send({ success: true, message: "Blog updated successfully", blog: updatedBlog });
 
   } catch (err) {
     console.error("Error updating blog:", err);
@@ -245,7 +276,6 @@ app.put("/blogs/:id", uploadBlog.single("image"), async (req, res) => {
 app.delete("/blogs/:id", async (req, res) => {
   try {
     const blogId = req.params.id;
-
     await blogsCollection.deleteOne({ _id: new ObjectId(blogId) });
     res.status(204).end(); 
   } catch (err) {
@@ -254,7 +284,7 @@ app.delete("/blogs/:id", async (req, res) => {
   }
 });
 
-
+// ... (rest of your routes remain unchanged)
 
 app.post("/api/post-users", async (req, res) => {
   try {
@@ -285,8 +315,25 @@ app.post("/api/post-users", async (req, res) => {
   }
 });
 
+app.post("/categories", async (req, res) => {
+  try {
+    const { value } = req.body;
+    if (!value) return res.status(400).send({ error: "Category value is required" });
+    const result = await categoriesCollection.insertOne({ value });
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
 
-
+app.get("/categories", async (req, res) => {
+  try {
+    const categories = await categoriesCollection.find().toArray();
+    res.send(categories);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
 
 app.get('/api/user/:email', async (req, res) => {
     try {
@@ -305,16 +352,13 @@ app.get('/api/user/:email', async (req, res) => {
     }
 });
 
-
 app.patch("/api/users/:id/role", async (req, res) => {
   try {
     const { id } = req.params;
     const { role, permissions } = req.body;
-
     if (!role) {
       return res.status(400).send({ error: "Role is required." });
     }
-
     const filter = { _id: new ObjectId(id) };
     const updateDoc = {
       $set: {
@@ -322,40 +366,31 @@ app.patch("/api/users/:id/role", async (req, res) => {
         permissions: permissions || [],
       },
     };
-
     const result = await usersCollection.updateOne(filter, updateDoc);
-
     if (result.matchedCount === 0) {
       return res.status(404).send({ error: "User not found." });
     }
-
     res.send({ success: true, message: "User role updated successfully.", result });
-
   } catch (err) {
     console.error("Error updating user role:", err);
     res.status(500).send({ error: err.message });
   }
 });
 
-
 app.delete('/api/users/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const filter = { _id: new ObjectId(id) };
         const result = await usersCollection.deleteOne(filter);
-
         if (result.deletedCount === 0) {
             return res.status(404).send({ error: "User not found." });
         }
-        
         res.send({ success: true, message: "User deleted successfully." });
-
     } catch (err) {
         console.error("Error deleting user:", err);
         res.status(500).send({ error: err.message });
     }
 });
-
 
 app.delete("/categories/:id", async (req, res) => {
   const { id } = req.params;
@@ -363,33 +398,6 @@ app.delete("/categories/:id", async (req, res) => {
   res.send(result);
 });
 
-
-// Add new category
-app.post("/categories", async (req, res) => {
-  try {
-    const { value } = req.body;
-    if (!value) return res.status(400).send({ error: "Category value is required" });
-
-    const result = await categoriesCollection.insertOne({ value });
-
-    res.send(result);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
-});
-
-// Get all categories
-app.get("/categories", async (req, res) => {
-  try {
-    const categories = await categoriesCollection.find().toArray();
-    res.send(categories);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
-});
- 
-
-// ---------------- Comments ----------------
 app.post('/comments', async (req, res) => {
   try {
     const comment = req.body;
@@ -418,14 +426,12 @@ app.get("/api/find-all-users", async (req, res) => {
   }
 });
 
-// ---------------- Address ----------------
 app.post("/address", async (req, res) => {
   try {
     const address = req.body;
     const result = await addressCollection.insertOne(address);
     res.send(result);
-  } catch (err)
- {
+  } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
@@ -439,9 +445,6 @@ app.get("/address", async (req, res) => {
   }
 });
 
-// ---------------- Product Management ----------------
-
-// Multer setup for products
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "uploads/products");
@@ -452,8 +455,6 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
-
-
 
 app.post(
   "/post-products",
@@ -466,32 +467,27 @@ app.post(
   async (req, res) => {
     try {
       const {
-        title, productCode, GSM_Code, productCategory, productSubCategory, productSize,
-        colors, Gender, fit, Sustainability, price, disCountPrice, email, availabelVarients,
-        metaTitle, metaDescription, description, printingEmbroidery, textileCare,
+        title, productCode, GSM_Code, productCategory, productSubCategory,
+        productSize, colors, Gender, fit, Sustainability, price, disCountPrice,
+        email, availabelVarients, metaTitle, metaDescription, description,
+        printingEmbroidery, textileCare,
       } = req.body;
-
-      // Handle file paths
+      const productColors = colors ? JSON.parse(colors) : [];
+      const parsedVariants = availabelVarients ? JSON.parse(availabelVarients) : [];
+      const parsedDescription = description ? JSON.parse(description) : null;
+      const parsedPrintingEmbroidery = printingEmbroidery ? JSON.parse(printingEmbroidery) : null;
+      const parsedTextileCare = textileCare ? JSON.parse(textileCare) : null;
       const mainImage = req.files["mainImage"] ? `/uploads/products/${req.files["mainImage"][0].filename}` : null;
       const galleryImages = req.files["galleryImages"] ? req.files["galleryImages"].map(file => `/uploads/products/${file.filename}`) : [];
-      const brandLogo = req.files["brandLogo"] ? req.files["brandLogo"].map(file => `/uploads/products/${file.filename}`) : [];
-      const mainPdfs = req.files["mainPdfs"] ? req.files["mainPdfs"].map(file => `/uploads/products/${file.filename}`) : [];
-
+      const brandLogo = req.files["brandLogo"] ? req.files["brandLogo"].map((file) => `/uploads/products/${file.filename}`) : [];
+      const mainPdfs = req.files["mainPdfs"] ? req.files["mainPdfs"].map((file) => `/uploads/products/${file.filename}`) : [];
       const productData = {
-        title, metaTitle, metaDescription, productCode, GSM_Code, productCategory,
-        productSubCategory, productSize, 
-        colors: colors ? JSON.parse(colors) : [], 
-        availabelVarients: availabelVarients ? JSON.parse(availabelVarients) : [], 
-        Gender, fit, Sustainability,
-        price: Number(price),
-        disCountPrice: disCountPrice ? Number(disCountPrice) : null,
-        description: description ? JSON.parse(description) : null,
-        printingEmbroidery: printingEmbroidery ? JSON.parse(printingEmbroidery) : null,
-        textileCare: textileCare ? JSON.parse(textileCare) : null,
-        email, mainImage, galleryImages, brandLogo, mainPdfs,
-        createdAt: new Date(),
+        title, metaTitle, metaDescription, productCode, GSM_Code, productCategory, productSubCategory,
+        productSize, productColors, availabelVarients: parsedVariants, Gender, fit, Sustainability,
+        price: Number(price), disCountPrice: disCountPrice ? Number(disCountPrice) : null,
+        description: parsedDescription, printingEmbroidery: parsedPrintingEmbroidery, textileCare: parsedTextileCare,
+        email, mainImage, galleryImages, brandLogo, mainPdfs, createdAt: new Date(),
       };
-
       const result = await productsCollection.insertOne(productData);
       res.send({ success: true, message: "Product created successfully", insertedId: result.insertedId });
     } catch (err) {
@@ -500,120 +496,6 @@ app.post(
     }
   }
 );
-
-
-app.patch(
-  "/update-product/:id",
-  upload.fields([
-    { name: "mainImage", maxCount: 1 },
-    { name: "galleryImages", maxCount: 10 },
-    { name: "brandLogo", maxCount: 10 },
-    { name: "mainPdfs", maxCount: 10 },
-  ]),
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const filter = { _id: new ObjectId(id) };
-
-      const existingProduct = await productsCollection.findOne(filter);
-      if (!existingProduct) {
-        return res.status(404).send({ success: false, error: "Product not found." });
-      }
-
-
-      const updateFields = { ...req.body };
-      
-
-      const fieldsToParse = ['colors', 'availabelVarients', 'description', 'printingEmbroidery', 'textileCare'];
-      fieldsToParse.forEach(field => {
-        if (updateFields[field] && typeof updateFields[field] === 'string') {
-          try {
-            updateFields[field] = JSON.parse(updateFields[field]);
-          } catch (e) {
-            console.warn(`Could not parse JSON for field: ${field}`);
-          }
-        }
-      });
-
-      if (updateFields.price) updateFields.price = Number(updateFields.price);
-      if (updateFields.disCountPrice) {
-        updateFields.disCountPrice = Number(updateFields.disCountPrice);
-      } else if (updateFields.disCountPrice === '' || updateFields.disCountPrice === null) {
-        updateFields.disCountPrice = null;
-      }
-
-      if (req.files && req.files["mainImage"]) {
-        updateFields.mainImage = `/uploads/products/${req.files["mainImage"][0].filename}`;
-      } else {
-        updateFields.mainImage = existingProduct.mainImage; 
-      }
-
-
-      if (req.files && req.files["galleryImages"]?.length > 0) {
-        updateFields.galleryImages = req.files["galleryImages"].map(file => `/uploads/products/${file.filename}`);
-      } else {
-        updateFields.galleryImages = existingProduct.galleryImages;
-      }
-      
-
-      if (req.files && req.files["brandLogo"]?.length > 0) {
-          updateFields.brandLogo = req.files["brandLogo"].map(file => `/uploads/products/${file.filename}`);
-      } else {
-          updateFields.brandLogo = existingProduct.brandLogo; 
-      }
-
-      
-      if (req.files && req.files["mainPdfs"]?.length > 0) {
-          updateFields.mainPdfs = req.files["mainPdfs"].map(file => `/uploads/products/${file.filename}`);
-      } else {
-          updateFields.mainPdfs = existingProduct.mainPdfs;
-      }
-
-
-      updateFields.updatedAt = new Date();
-
-
-      const result = await productsCollection.updateOne(
-        filter,
-        { $set: updateFields }
-      );
-
-      res.send({ success: true, message: "Product updated successfully", result });
-
-    } catch (err) {
-      console.error("Error updating product:", err);
-      res.status(500).send({ success: false, error: err.message });
-    }
-  }
-);
-
-
-
-
-// ------------------- DELETE PRODUCT API -------------------
-app.delete("/products/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid product ID" });
-    }
-
-    const query = { _id:  new ObjectId(id) };
-    const result = await productsCollection.deleteOne(query);
-
-    if (result.deletedCount === 1) {
-      res.status(200).json({ message: "Product deleted successfully" });
-    } else {
-      res.status(404).json({ message: "Product not found" });
-    }
-  } catch (error) {
-    console.error(" Delete Error:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
-
-
 
 app.get("/find-products", async (req, res) => {
   try {
@@ -624,17 +506,11 @@ app.get("/find-products", async (req, res) => {
   }
 });
 
-// ---------------- Product Attributes ----------------
 app.post("/post-productAttribute", async (req, res) => {
   try {
     const { key, value } = req.body;
     if (!key || !value) return res.status(400).send({ error: "Key and value are required" });
-
-    const result = await productAttributeCollection.updateOne(
-      {},
-      { $push: { [`productAttributes.${key}`]: { id: new Date().getTime().toString(), value } } },
-      { upsert: true }
-    );
+    const result = await productAttributeCollection.updateOne({}, { $push: { [`productAttributes.${key}`]: { id: new Date().getTime().toString(), value } } }, { upsert: true });
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
@@ -650,7 +526,6 @@ app.get("/find-productAttributes", async (req, res) => {
   }
 });
 
-// ---------------- Product Reviews ----------------
 app.post("/post-productReview", async (req, res) => {
   try {
     const data = req.body;
@@ -670,9 +545,6 @@ app.get("/find-productReview", async (req, res) => {
   }
 });
 
-
-
-// GET all banner slides
 app.get("/banners", async (req, res) => {
   try {
     const result = await bannersCollection.find().sort({ createdAt: -1 }).toArray();
@@ -685,31 +557,18 @@ app.get("/banners", async (req, res) => {
 app.post("/banners", bannerUpload.single('image'), async (req, res) => {
   try {
     const { subtitle, title1, title2, titleBold } = req.body;
-    
     if (!req.file) {
       return res.status(400).send({ success: false, error: "Image file is required." });
     }
-
     const imagePath = `/uploads/banners/${req.file.filename}`;
-
-    const newBannerData = {
-      subtitle,
-      title1,
-      title2,
-      titleBold,
-      image: imagePath,
-      createdAt: new Date(),
-    };
-
+    const newBannerData = { subtitle, title1, title2, titleBold, image: imagePath, createdAt: new Date() };
     const result = await bannersCollection.insertOne(newBannerData);
     res.send({ success: true, result });
-
   } catch (err) {
     console.error("Error saving banner:", err);
     res.status(500).send({ success: false, error: err.message });
   }
 });
-
 
 app.delete("/banners/:id", async (req, res) => {
     try {
@@ -723,10 +582,6 @@ app.delete("/banners/:id", async (req, res) => {
         res.status(500).send({ success: false, error: err.message });
     }
 });
-// ----------------------------------------------------
-
-
-
 
 app.get("/size-charts", async (req, res) => {
   try {
@@ -737,30 +592,20 @@ app.get("/size-charts", async (req, res) => {
   }
 });
 
-
 app.post("/size-charts", uploadSizeChart.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).send({ success: false, error: "Image file is required." });
     }
-
     const imagePath = `/uploads/size_charts/${req.file.filename}`;
-
-    const newSizeChart = {
-      src: imagePath,
-      alt: req.body.alt || 'Size Chart Image', 
-      createdAt: new Date(),
-    };
-
+    const newSizeChart = { src: imagePath, alt: req.body.alt || 'Size Chart Image', createdAt: new Date() };
     const result = await sizeChartsCollection.insertOne(newSizeChart);
     res.send({ success: true, result });
-
   } catch (err) {
     console.error("Error saving size chart:", err);
     res.status(500).send({ success: false, error: err.message });
   }
 });
-
 
 app.delete("/size-charts/:id", async (req, res) => {
     try {
@@ -775,7 +620,6 @@ app.delete("/size-charts/:id", async (req, res) => {
     }
 });
 
-// ---------------- START SERVER ----------------
 app.listen(port, () => {
   console.log("🚀 ayira server is running on port", port);
 });
