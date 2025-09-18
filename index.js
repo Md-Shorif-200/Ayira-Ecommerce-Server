@@ -21,9 +21,7 @@ app.use(
   })
 );
 
-// const openai = new OpenAI({
-//   apiKey: process.env.OPENAI_API_KEY,
-// });
+
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -943,28 +941,8 @@ app.delete("/size-charts/:id", async (req, res) => {
 });
 
 
-// app.post("/api/chatgpt", async (req, res) => {
-//   try {
-//     const { message } = req.body;
 
-//     if (!message) {
-//       return res.status(400).json({ error: "Message is required" });
-//     }
 
-//     // Use new method
-//     const response = await openai.chat.completions.create({
-//       model: "gpt-3.5-turbo", // or "gpt-4o" if you have access
-//       messages: [{ role: "user", content: message }],
-//     });
-
-//     res.json({
-//       reply: response.choices[0].message.content,
-//     });
-//   } catch (error) {
-//     console.error("ChatGPT error:", error);
-//     res.status(500).json({ error: "Failed to get response from ChatGPT" });
-//   }
-// });
 
 
 
