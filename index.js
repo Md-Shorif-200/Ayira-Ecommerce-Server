@@ -113,7 +113,7 @@ const uploadSizeChart = multer({ storage: sizeChartStorage });
 
 // ---------------- Blog Routes with Multer ----------------
 
-// Multer setup for blogs
+
 const blogStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "uploads/blogs");
@@ -125,7 +125,7 @@ const blogStorage = multer.diskStorage({
 });
 const uploadBlog = multer({ storage: blogStorage });
 
-// --- NEW: Middleware to handle two separate image fields for blogs ---
+
 const blogUploadFields = uploadBlog.fields([
   { name: 'image', maxCount: 1 },
   { name: 'extraImage', maxCount: 1 }
@@ -134,17 +134,17 @@ const blogUploadFields = uploadBlog.fields([
 // Create blog (UPDATED)
 app.post("/blogs", blogUploadFields, async (req, res) => {
   try {
-    // 1. Destructure all new text fields from the request body
+   
     const { 
       title, category, content, metaTitle, metaDescription, 
       shortDescription, note, tags 
     } = req.body;
     
-    // 2. Handle files from req.files (plural) for both fields
+    
     const blogImage = req.files && req.files['image'] ? `/uploads/blogs/${req.files['image'][0].filename}` : null;
     const extraBlogImage = req.files && req.files['extraImage'] ? `/uploads/blogs/${req.files['extraImage'][0].filename}` : null;
 
-    // 3. Include all new fields in the data to be saved
+    
     const blogData = {
       title,
       category,
@@ -185,7 +185,7 @@ app.get("/blogs/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate the ID format
+    
     if (!ObjectId.isValid(id)) {
       return res.status(400).send({ error: "Invalid blog ID format." });
     }
@@ -193,7 +193,7 @@ app.get("/blogs/:id", async (req, res) => {
     const query = { _id: new ObjectId(id) };
     const blog = await blogsCollection.findOne(query);
 
-    // If no blog is found, return a 404 error
+   
     if (!blog) {
       return res.status(404).send({ error: "Blog not found." });
     }
@@ -206,6 +206,7 @@ app.get("/blogs/:id", async (req, res) => {
   }
 });
 
+
 // Update blog (UPDATED)
 app.put("/blogs/:id", blogUploadFields, async (req, res) => {
   try {
@@ -215,14 +216,14 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
       return res.status(400).send({ success: false, error: "Invalid blog ID." });
     }
 
-    // 1. Destructure all new text fields and existing image paths
+  
     const { 
       title, category, content, metaTitle, metaDescription,
       shortDescription, note, tags, 
       existingImage, existingExtraImage 
     } = req.body;
     
-    // 2. Logic to determine final image paths (new upload vs existing)
+    
     const blogImage = req.files && req.files['image'] 
       ? `/uploads/blogs/${req.files['image'][0].filename}` 
       : existingImage || null;
@@ -231,7 +232,7 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
       ? `/uploads/blogs/${req.files['extraImage'][0].filename}`
       : existingExtraImage || null;
 
-    // 3. Include all new fields in the updated data object
+ 
     const updatedBlogData = {
       title,
       category,
