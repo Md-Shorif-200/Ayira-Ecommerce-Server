@@ -561,7 +561,7 @@ app.post(
         productCategory,
         productSubCategory,
         productSize,
-        productColors,
+        colors: productColors,
         availabelVarients: parsedVariants,
         Gender,
         fit,
