@@ -49,7 +49,7 @@ let categoriesCollection;
 
 async function run() {
   try {
-    // await client.connect();
+    await client.connect();
     const Db = client.db("Ayira-Database");
 
     sizeChartsCollection = Db.collection("sizeCharts");
@@ -64,8 +64,8 @@ async function run() {
     productsCollection = Db.collection("all-products");
     categoriesCollection = Db.collection("categories");
 
-    // await client.db("admin").command({ ping: 1 });
-    // console.log("Connected to MongoDB!");
+    await client.db("admin").command({ ping: 1 });
+    console.log("Connected to MongoDB!");
   } catch (err) {
     console.error("DB connection failed:", err);
   }
