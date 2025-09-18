@@ -133,7 +133,7 @@ const blogStorage = multer.diskStorage({
 });
 const uploadBlog = multer({ storage: blogStorage });
 
-// --- NEW: Middleware to handle two separate image fields for blogs ---
+
 const blogUploadFields = uploadBlog.fields([
   { name: "image", maxCount: 1 },
   { name: "extraImage", maxCount: 1 },
@@ -164,7 +164,7 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : null;
 
-    // 3. Include all new fields in the data to be saved
+    
     const blogData = {
       title,
       category,
@@ -209,7 +209,7 @@ app.get("/blogs/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate the ID format
+    
     if (!ObjectId.isValid(id)) {
       return res.status(400).send({ error: "Invalid blog ID format." });
     }
@@ -217,7 +217,7 @@ app.get("/blogs/:id", async (req, res) => {
     const query = { _id: new ObjectId(id) };
     const blog = await blogsCollection.findOne(query);
 
-    // If no blog is found, return a 404 error
+   
     if (!blog) {
       return res.status(404).send({ error: "Blog not found." });
     }
@@ -228,6 +228,7 @@ app.get("/blogs/:id", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
+
 
 // Update blog (UPDATED)
 app.put("/blogs/:id", blogUploadFields, async (req, res) => {
@@ -265,7 +266,7 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : existingExtraImage || null;
 
-    // 3. Include all new fields in the updated data object
+ 
     const updatedBlogData = {
       title,
       category,
