@@ -426,6 +426,8 @@ app.delete("/api/users/:id", async (req, res) => {
   }
 });
 
+
+
 app.delete("/categories/:id", async (req, res) => {
   const { id } = req.params;
   const result = await categoriesCollection.deleteOne({
