@@ -6,6 +6,7 @@ require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const OpenAI = require("openai");
 
 app.use(express.json());
 // app.use(cors({ origin: "http://localhost:3000" }));
@@ -19,6 +20,8 @@ app.use(
     ],
   })
 );
+
+
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -46,7 +49,7 @@ let categoriesCollection;
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const Db = client.db("Ayira-Database");
 
     sizeChartsCollection = Db.collection("sizeCharts");
@@ -61,8 +64,8 @@ async function run() {
     productsCollection = Db.collection("all-products");
     categoriesCollection = Db.collection("categories");
 
-    await client.db("admin").command({ ping: 1 });
-    console.log("Connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Connected to MongoDB!");
   } catch (err) {
     console.error("DB connection failed:", err);
   }
@@ -426,6 +429,8 @@ app.delete("/api/users/:id", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
+
+
 
 app.delete("/categories/:id", async (req, res) => {
   const { id } = req.params;
@@ -935,6 +940,12 @@ app.delete("/size-charts/:id", async (req, res) => {
     res.status(500).send({ success: false, error: err.message });
   }
 });
+
+
+
+
+
+
 
 app.listen(port, () => {
   console.log("🚀 ayira server is running on port", port);
