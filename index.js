@@ -6,6 +6,7 @@ require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const OpenAI = require("openai");
 
 app.use(express.json());
 // app.use(cors({ origin: "http://localhost:3000" }));
@@ -19,6 +20,10 @@ app.use(
     ],
   })
 );
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -46,7 +51,7 @@ let categoriesCollection;
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const Db = client.db("Ayira-Database");
 
     sizeChartsCollection = Db.collection("sizeCharts");
@@ -61,8 +66,8 @@ async function run() {
     productsCollection = Db.collection("all-products");
     categoriesCollection = Db.collection("categories");
 
-    await client.db("admin").command({ ping: 1 });
-    console.log("Connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Connected to MongoDB!");
   } catch (err) {
     console.error("DB connection failed:", err);
   }
@@ -936,6 +941,32 @@ app.delete("/size-charts/:id", async (req, res) => {
     res.status(500).send({ success: false, error: err.message });
   }
 });
+
+
+app.post("/api/chatgpt", async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    // Use new method
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo", // or "gpt-4o" if you have access
+      messages: [{ role: "user", content: message }],
+    });
+
+    res.json({
+      reply: response.choices[0].message.content,
+    });
+  } catch (error) {
+    console.error("ChatGPT error:", error);
+    res.status(500).json({ error: "Failed to get response from ChatGPT" });
+  }
+});
+
+
 
 app.listen(port, () => {
   console.log("🚀 ayira server is running on port", port);
