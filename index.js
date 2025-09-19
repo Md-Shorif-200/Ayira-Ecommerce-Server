@@ -16,6 +16,7 @@ app.use(
       "http://localhost:3000",
       "http://localhost:5000",
       "https://ayira-ecommerce-main.vercel.app",
+      "https://y-lac-seven.vercel.app"
     ],
   })
 );
