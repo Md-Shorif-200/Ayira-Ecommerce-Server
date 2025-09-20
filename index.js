@@ -17,12 +17,10 @@ app.use(
       "http://localhost:3000",
       "http://localhost:5000",
       "https://ayira-ecommerce-main.vercel.app",
-      "https://y-lac-seven.vercel.app"
+      "https://y-lac-seven.vercel.app",
     ],
   })
 );
-
-
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -91,12 +89,33 @@ app.post("/orders", async (req, res) => {
   }
 });
 
+// app.get("/orders", async (req, res) => {
+//   try {
+//     const result = await ordersCollection.find().toArray();
+//     res.send(result);
+//   } catch (err) {
+//     res.status(500).send({ error: err.message });
+//   }
+// });
+
+// =================new order Api================
+
 app.get("/orders", async (req, res) => {
   try {
-    const result = await ordersCollection.find().toArray();
+    const { search } = req.query;
+    let query = {};
+    if (search) {
+      query.name = { $regex: search, $options: "i" };
+    }
+    const result = await ordersCollection
+      .find(query)
+      .sort({ _id: -1 })
+      .toArray();
+
     res.send(result);
   } catch (err) {
-    res.status(500).send({ error: err.message });
+    console.error("Error fetching orders:", err);
+    res.status(500).send({ error: "Failed to fetch orders." });
   }
 });
 
@@ -137,7 +156,6 @@ const blogStorage = multer.diskStorage({
 });
 const uploadBlog = multer({ storage: blogStorage });
 
-
 const blogUploadFields = uploadBlog.fields([
   { name: "image", maxCount: 1 },
   { name: "extraImage", maxCount: 1 },
@@ -168,7 +186,6 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : null;
 
-    
     const blogData = {
       title,
       category,
@@ -196,24 +213,49 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
 });
 
 // Get all blogs
+// ==========add here filter ======================
+// app.get("/blogs", async (req, res) => {
+//   try {
+//     const result = await blogsCollection
+//       .find()
+//       .sort({ createdAt: -1 })
+//       .toArray();
+//     res.send(result);
+//   } catch (err) {
+//     res.status(500).send({ error: err.message });
+//   }
+// });
+
+// ===============new get api for blog get=========
+
 app.get("/blogs", async (req, res) => {
   try {
+    const { search, category } = req.query;
+    let query = {};
+    if (category && category !== "all") {
+      query.category = category;
+    }
+    if (search) {
+      query.title = { $regex: search, $options: "i" };
+    }
     const result = await blogsCollection
-      .find()
-      .sort({ createdAt: -1 })
+      .find(query)
+      .sort({ createsAt: -1 })
       .toArray();
     res.send(result);
   } catch (err) {
-    res.status(500).send({ error: err.message });
+    console.error("Error fetching blogs:", err);
+    res.status(500).send({ error: "Failed to fetch blogs." });
   }
 });
+
+// =========new code end========
 
 // NEW: Get a single blog by ID
 app.get("/blogs/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    
     if (!ObjectId.isValid(id)) {
       return res.status(400).send({ error: "Invalid blog ID format." });
     }
@@ -221,7 +263,6 @@ app.get("/blogs/:id", async (req, res) => {
     const query = { _id: new ObjectId(id) };
     const blog = await blogsCollection.findOne(query);
 
-   
     if (!blog) {
       return res.status(404).send({ error: "Blog not found." });
     }
@@ -232,7 +273,6 @@ app.get("/blogs/:id", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
-
 
 // Update blog (UPDATED)
 app.put("/blogs/:id", blogUploadFields, async (req, res) => {
@@ -270,7 +310,6 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : existingExtraImage || null;
 
- 
     const updatedBlogData = {
       title,
       category,
@@ -431,8 +470,6 @@ app.delete("/api/users/:id", async (req, res) => {
   }
 });
 
-
-
 app.delete("/categories/:id", async (req, res) => {
   const { id } = req.params;
   const result = await categoriesCollection.deleteOne({
@@ -440,7 +477,8 @@ app.delete("/categories/:id", async (req, res) => {
   });
   res.send(result);
 });
-
+// ===============================new code
+// POST /comments
 app.post("/comments", async (req, res) => {
   try {
     const comment = req.body;
@@ -451,9 +489,15 @@ app.post("/comments", async (req, res) => {
   }
 });
 
+// GET /comments -
 app.get("/comments", async (req, res) => {
   try {
-    const result = await commentsCollection.find().toArray();
+    const blogId = req.query.blogId;
+    let query = {};
+    if (blogId) {
+      query = { blogId: blogId };
+    }
+    const result = await commentsCollection.find(query).toArray();
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
@@ -498,7 +542,6 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
-
 
 // ----------------- add products related api
 app.post(
@@ -607,7 +650,6 @@ app.get("/find-products", async (req, res) => {
   }
 });
 
-
 app.delete("/products/:id", async (req, res) => {
   try {
     const id = req.params.id;
@@ -616,16 +658,19 @@ app.delete("/products/:id", async (req, res) => {
     const result = await productsCollection.deleteOne(query);
 
     if (result.deletedCount > 0) {
-      res.status(200).send({ success: true, message: "Product deleted successfully" });
+      res
+        .status(200)
+        .send({ success: true, message: "Product deleted successfully" });
     } else {
       res.status(404).send({ success: false, message: "Product not found" });
     }
   } catch (error) {
     console.error("Delete error:", error);
-    res.status(500).send({ success: false, message: "Failed to delete product" });
+    res
+      .status(500)
+      .send({ success: false, message: "Failed to delete product" });
   }
 });
-
 
 app.patch(
   "/update-product/:id",
@@ -638,7 +683,6 @@ app.patch(
   async (req, res) => {
     try {
       const { id } = req.params;
-
 
       if (!ObjectId.isValid(id)) {
         return res
@@ -740,14 +784,15 @@ app.patch(
       res.send({ success: true, message: "Product updated successfully!" });
     } catch (err) {
       console.error("Error while updating product:", err);
-      res
-        .status(500)
-        .send({ success: false, message: "An internal server error occurred." });
+      res.status(500).send({
+        success: false,
+        message: "An internal server error occurred.",
+      });
     }
   }
 );
 
-// ----------- product management 
+// ----------- product management
 app.post("/post-productAttribute", async (req, res) => {
   try {
     let { key, value } = req.body;
@@ -809,7 +854,7 @@ app.post("/post-productAttribute", async (req, res) => {
     console.error("Error in /post-productAttribute:", err);
     res.status(500).send({ error: err.message });
   }
-}); 
+});
 
 app.get("/find-productAttributes", async (req, res) => {
   try {
@@ -820,7 +865,7 @@ app.get("/find-productAttributes", async (req, res) => {
   }
 });
 
-// ---------------- product review 
+// ---------------- product review
 app.post("/post-productReview", async (req, res) => {
   try {
     const data = req.body;
@@ -941,12 +986,6 @@ app.delete("/size-charts/:id", async (req, res) => {
     res.status(500).send({ success: false, error: err.message });
   }
 });
-
-
-
-
-
-
 
 app.listen(port, () => {
   console.log("🚀 ayira server is running on port", port);
