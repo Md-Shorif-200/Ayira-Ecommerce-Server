@@ -511,14 +511,87 @@ app.get("/comments", async (req, res) => {
   }
 });
 
-app.get("/api/find-all-users", async (req, res) => {
+// ---------------------------------NEW------------------------------------------------------
+
+app.get("/api/users", async (req, res) => {
   try {
-    const result = await usersCollection.find().toArray();
-    res.send(result);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || "";
+    const skip = (page - 1) * limit;
+
+    const queryFilter = {
+      role: 'user', // Only fetch documents with the role 'user'
+      ...(search && { name: { $regex: search, $options: "i" } }),
+    };
+
+    const [users, totalUsers] = await Promise.all([
+      usersCollection.find(queryFilter).skip(skip).limit(limit).toArray(),
+      usersCollection.countDocuments(queryFilter),
+    ]);
+
+    res.send({
+      users,
+      totalUsers,
+      totalPages: Math.ceil(totalUsers / limit),
+      currentPage: page,
+    });
+  } catch (err) {
+    console.error("Error fetching users:", err);
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// GET /api/staff - Simple endpoint to get ALL staff members (for small lists)
+app.get("/api/staff", async (req, res) => {
+  try {
+    const queryFilter = { role: 'staff' };
+    const staff = await usersCollection.find(queryFilter).toArray();
+    res.send(staff);
+  } catch (err) {
+    console.error("Error fetching staff:", err);
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// GET /api/promotable-users - Lightweight endpoint for the AddStaff dropdown
+app.get("/api/promotable-users", async (req, res) => {
+  try {
+    const query = { role: "user" };
+    // Projection only sends the fields we absolutely need, making it very fast
+    const options = {
+      projection: { _id: 1, name: 1, email: 1 },
+      sort: { name: 1 } // Sort alphabetically for a better user experience
+    };
+    const users = await usersCollection.find(query, options).toArray();
+    res.send(users);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
+
+app.get("/api/stats", async (req, res) => {
+  try {
+    // Run multiple count queries in parallel for maximum efficiency
+    const [totalUsers, totalProducts, totalOrders] = await Promise.all([
+      usersCollection.countDocuments({}), // Counts ALL documents in the users collection
+      productsCollection.countDocuments({}),
+      ordersCollection.countDocuments({}),
+    ]);
+
+    // Send a single, small JSON object with the results
+    res.send({
+      totalUsers,
+      totalProducts,
+      totalOrders,
+    });
+  } catch (err) {
+    console.error("Error fetching dashboard stats:", err);
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------------------------------------------
 
 app.post("/address", async (req, res) => {
   try {
