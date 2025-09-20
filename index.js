@@ -159,12 +159,12 @@ const uploadBlog = multer({ storage: blogStorage });
 const blogUploadFields = uploadBlog.fields([
   { name: "image", maxCount: 1 },
   { name: "extraImage", maxCount: 1 },
+  { name: "authorImage", maxCount: 1 },
 ]);
 
-// Create blog (UPDATED)
+// Create blog (UPDATED with Author Image)
 app.post("/blogs", blogUploadFields, async (req, res) => {
   try {
-    // 1. Destructure all new text fields from the request body
     const {
       title,
       category,
@@ -174,9 +174,13 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
       shortDescription,
       note,
       tags,
+      authorName,
+      authorBio,
+      authorSocialLink1,
+      authorSocialLink2,
+      authorSocialLink3,
     } = req.body;
 
-    // 2. Handle files from req.files (plural) for both fields
     const blogImage =
       req.files && req.files["image"]
         ? `/uploads/blogs/${req.files["image"][0].filename}`
@@ -184,6 +188,11 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
     const extraBlogImage =
       req.files && req.files["extraImage"]
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
+        : null;
+    // NEW: Handle author image file
+    const authorImage =
+      req.files && req.files["authorImage"]
+        ? `/uploads/blogs/${req.files["authorImage"][0].filename}`
         : null;
 
     const blogData = {
@@ -197,11 +206,16 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
       tags,
       image: blogImage,
       extraImage: extraBlogImage,
+      authorName: authorName || "",
+      authorBio: authorBio || "",
+      authorImage: authorImage, // NEW: Add author image path
+      authorSocialLink1: authorSocialLink1 || "",
+      authorSocialLink2: authorSocialLink2 || "",
+      authorSocialLink3: authorSocialLink3 || "",
       createdAt: new Date(),
     };
 
     const result = await blogsCollection.insertOne(blogData);
-
     const newBlog = await blogsCollection.findOne({ _id: result.insertedId });
     res
       .status(201)
@@ -274,18 +288,16 @@ app.get("/blogs/:id", async (req, res) => {
   }
 });
 
-// Update blog (UPDATED)
+// Update blog (UPDATED with Author Image)
 app.put("/blogs/:id", blogUploadFields, async (req, res) => {
   try {
     const { id } = req.params;
-
     if (!ObjectId.isValid(id)) {
       return res
         .status(400)
         .send({ success: false, error: "Invalid blog ID." });
     }
 
-    // 1. Destructure all new text fields and existing image paths
     const {
       title,
       category,
@@ -297,18 +309,27 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
       tags,
       existingImage,
       existingExtraImage,
+      authorName,
+      authorBio,
+      existingAuthorImage,
+      authorSocialLink1,
+      authorSocialLink2,
+      authorSocialLink3,
     } = req.body;
 
-    // 2. Logic to determine final image paths (new upload vs existing)
     const blogImage =
       req.files && req.files["image"]
         ? `/uploads/blogs/${req.files["image"][0].filename}`
         : existingImage || null;
-
     const extraBlogImage =
       req.files && req.files["extraImage"]
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : existingExtraImage || null;
+
+    const authorImage =
+      req.files && req.files["authorImage"]
+        ? `/uploads/blogs/${req.files["authorImage"][0].filename}`
+        : existingAuthorImage || null;
 
     const updatedBlogData = {
       title,
@@ -321,6 +342,12 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
       tags,
       image: blogImage,
       extraImage: extraBlogImage,
+      authorName,
+      authorBio,
+      authorImage,
+      authorSocialLink1,
+      authorSocialLink2,
+      authorSocialLink3,
       updatedAt: new Date(),
     };
 
@@ -332,7 +359,6 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
     if (result.matchedCount === 0) {
       return res.status(404).send({ success: false, error: "Blog not found." });
     }
-
     const updatedBlog = await blogsCollection.findOne({
       _id: new ObjectId(id),
     });
@@ -358,7 +384,7 @@ app.delete("/blogs/:id", async (req, res) => {
   }
 });
 
-// ... (rest of your routes remain unchanged)
+
 
 app.post("/api/post-users", async (req, res) => {
   try {
@@ -494,8 +520,6 @@ app.post("/comments", async (req, res) => {
   }
 });
 
-// ... rest of your code
-
 // GET /comments -
 app.get("/comments", async (req, res) => {
   try {
@@ -521,7 +545,7 @@ app.get("/api/users", async (req, res) => {
     const skip = (page - 1) * limit;
 
     const queryFilter = {
-      role: 'user', // Only fetch documents with the role 'user'
+      role: "user", // Only fetch documents with the role 'user'
       ...(search && { name: { $regex: search, $options: "i" } }),
     };
 
@@ -545,7 +569,7 @@ app.get("/api/users", async (req, res) => {
 // GET /api/staff - Simple endpoint to get ALL staff members (for small lists)
 app.get("/api/staff", async (req, res) => {
   try {
-    const queryFilter = { role: 'staff' };
+    const queryFilter = { role: "staff" };
     const staff = await usersCollection.find(queryFilter).toArray();
     res.send(staff);
   } catch (err) {
@@ -561,7 +585,7 @@ app.get("/api/promotable-users", async (req, res) => {
     // Projection only sends the fields we absolutely need, making it very fast
     const options = {
       projection: { _id: 1, name: 1, email: 1 },
-      sort: { name: 1 } // Sort alphabetically for a better user experience
+      sort: { name: 1 }, // Sort alphabetically for a better user experience
     };
     const users = await usersCollection.find(query, options).toArray();
     res.send(users);
