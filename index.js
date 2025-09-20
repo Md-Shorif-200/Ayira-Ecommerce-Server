@@ -6,7 +6,7 @@ require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const OpenAI = require("openai");
+
 
 app.use(express.json());
 // app.use(cors({ origin: "http://localhost:3000" }));
@@ -599,12 +599,60 @@ app.post(
 
 app.get("/find-products", async (req, res) => {
   try {
-    const result = await productsCollection.find().toArray();
+    const {
+      category,
+      subCategory,
+      size,
+      colour,
+      fit,
+      gender,
+      sustainability,
+            search,
+
+    } = req.query;
+
+    let query = {};
+
+    if (category) {
+      query.productCategory = { $regex: new RegExp(category, "i") };
+    }
+    if (subCategory) {
+      query.productSubCategory = { $regex: new RegExp(subCategory, "i") };
+    }
+    if (size) {
+      query.productSize = size;
+    }
+    if (colour) {
+      query.productColour = colour;
+    }
+    if (fit) {
+      query.fit = fit;
+    }
+    if (gender) {
+   
+      query.Gender = gender;
+    }
+    if (sustainability) {
+     
+      query.Sustainability = sustainability;
+    }
+
+        if (search) {
+      query.title = { $regex: new RegExp(search, "i") };
+    }
+
+
+    const result = await productsCollection.find(query).toArray();
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
+
+
+
+
+
 
 
 app.delete("/products/:id", async (req, res) => {
