@@ -159,6 +159,7 @@ const uploadBlog = multer({ storage: blogStorage });
 const blogUploadFields = uploadBlog.fields([
   { name: "image", maxCount: 1 },
   { name: "extraImage", maxCount: 1 },
+  { name: "authorImage", maxCount: 1 }
 ]);
 
 // Create blog (UPDATED)
@@ -230,19 +231,47 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
 
 app.get("/blogs", async (req, res) => {
   try {
+    
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+   
     const { search, category } = req.query;
     let query = {};
     if (category && category !== "all") {
       query.category = category;
     }
     if (search) {
-      query.title = { $regex: search, $options: "i" };
+      
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { content: { $regex: search, $options: "i" } },
+        { tags: { $regex: search, $options: "i" } },
+      ];
     }
-    const result = await blogsCollection
-      .find(query)
-      .sort({ createsAt: -1 })
-      .toArray();
-    res.send(result);
+  const [blogs, totalBlogs] = await Promise.all([
+      
+      blogsCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      
+      blogsCollection.countDocuments(query),
+    ]);
+
+   
+    const totalPages = Math.ceil(totalBlogs / limit);
+
+  
+    res.send({
+      blogs,
+      totalBlogs,
+      totalPages,
+      currentPage: page,
+    });
   } catch (err) {
     console.error("Error fetching blogs:", err);
     res.status(500).send({ error: "Failed to fetch blogs." });
@@ -250,6 +279,29 @@ app.get("/blogs", async (req, res) => {
 });
 
 // =========new code end========
+app.get("/blogs/search-titles", async (req, res) => {
+  try {
+    const { q } = req.query; 
+
+    if (!q || q.trim() === "") {
+      return res.send([]);
+    }
+    
+    const query = { title: { $regex: q, $options: "i" } };
+    const projection = { _id: 1, title: 1 };
+
+    const blogs = await blogsCollection
+      .find(query)
+      .project(projection)
+      .limit(10)
+      .toArray();
+
+    res.send(blogs);
+  } catch (err) {
+    console.error("Error searching blog titles:", err);
+    res.status(500).send({ error: "Failed to search blogs." });
+  }
+});
 
 // NEW: Get a single blog by ID
 app.get("/blogs/:id", async (req, res) => {
@@ -723,7 +775,50 @@ app.post(
 
 app.get("/find-products", async (req, res) => {
   try {
-    const result = await productsCollection.find().toArray();
+    const {
+      category,
+      subCategory,
+      size,
+      colour,
+      fit,
+      gender,
+      sustainability,
+            search,
+
+    } = req.query;
+
+    let query = {};
+
+    if (category) {
+      query.productCategory = { $regex: new RegExp(category, "i") };
+    }
+    if (subCategory) {
+      query.productSubCategory = { $regex: new RegExp(subCategory, "i") };
+    }
+    if (size) {
+      query.productSize = size;
+    }
+    if (colour) {
+      query.productColour = colour;
+    }
+    if (fit) {
+      query.fit = fit;
+    }
+    if (gender) {
+   
+      query.Gender = gender;
+    }
+    if (sustainability) {
+     
+      query.Sustainability = sustainability;
+    }
+
+        if (search) {
+      query.title = { $regex: new RegExp(search, "i") };
+    }
+
+
+    const result = await productsCollection.find(query).toArray();
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
