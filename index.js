@@ -479,15 +479,22 @@ app.delete("/categories/:id", async (req, res) => {
 });
 // ===============================new code
 // POST /comments
+
 app.post("/comments", async (req, res) => {
   try {
     const comment = req.body;
-    const result = await commentsCollection.insertOne(comment);
+    const commentWithTimestamp = {
+      ...comment,
+      createdAt: new Date(),
+    };
+    const result = await commentsCollection.insertOne(commentWithTimestamp);
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
+
+// ... rest of your code
 
 // GET /comments -
 app.get("/comments", async (req, res) => {
