@@ -46,6 +46,7 @@ let productAttributeCollection;
 let productReviewCollection;
 let productsCollection;
 let categoriesCollection;
+let whichListCollection;
 
 async function run() {
   try {
@@ -63,6 +64,7 @@ async function run() {
     productReviewCollection = Db.collection("Product-Reviews");
     productsCollection = Db.collection("all-products");
     categoriesCollection = Db.collection("categories");
+    whichListCollection = Db.collection("whichLists");
 
     await client.db("admin").command({ ping: 1 });
     console.log("Connected to MongoDB!");
@@ -991,6 +993,58 @@ app.delete("/size-charts/:id", async (req, res) => {
 
 
 
+// ---------------- whichlist 
+app.post("/add-whichlist", async (req, res) => {
+  try {
+    const data = req.body;
+    const result = await whichListCollection.insertOne(data);
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.get("/find-whichlist", async (req, res) => {
+  try {
+    const result = await whichListCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.get("/find-whichlist/:email", async (req, res) => {
+  try {
+    const email = req.params.email;
+
+
+    const wishlistData = await whichListCollection.find({ email }).toArray();
+
+
+    const productIds = wishlistData.map(item => new ObjectId(item.productId));
+
+
+    const products = await productsCollection
+      .find({ _id: { $in: productIds } })
+      .toArray();
+
+
+    const result = wishlistData.map(item => {
+      const product = products.find(
+        p => p._id.toString() === item.productId.toString()
+      );
+      return {
+        ...item,
+        productDetails: product || null
+      };
+    });
+
+    res.send(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: "Server Error" });
+  }
+});
 
 
 
