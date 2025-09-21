@@ -6,7 +6,6 @@ require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const OpenAI = require("openai");
 
 app.use(express.json());
 // app.use(cors({ origin: "http://localhost:3000" }));
@@ -1161,6 +1160,52 @@ app.delete("/size-charts/:id", async (req, res) => {
     res.status(500).send({ success: false, error: err.message });
   }
 });
+
+
+// ======================= GEMINI CHATBOT ROUTE =======================
+app.post('/api/gemini', async (req, res) => {
+  try {
+    const { message } = req.body; // Get the message from the request body
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+    
+    // Call the Google Gemini API
+    const response = await fetch(GEMINI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: message }] }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API Error: ${errorText}`);
+    }
+
+    const data = await response.json();
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!reply) {
+      return res.status(500).json({ error: "No content in response from Gemini." });
+    }
+
+    // Send the clean reply back to the frontend
+    return res.status(200).json({ reply });
+
+  } catch (error) {
+    console.error("Error in /api/gemini route:", error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+// =====================================================================
 
 app.listen(port, () => {
   console.log("🚀 ayira server is running on port", port);
