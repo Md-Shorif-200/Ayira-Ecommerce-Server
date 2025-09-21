@@ -17,10 +17,13 @@ app.use(
       "http://localhost:3000",
       "http://localhost:5000",
       "https://ayira-ecommerce-main.vercel.app",
-      "https://y-lac-seven.vercel.app",
     ],
   })
 );
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -48,7 +51,7 @@ let categoriesCollection;
 
 async function run() {
   try {
-    // await client.connect();
+    await client.connect();
     const Db = client.db("Ayira-Database");
 
     sizeChartsCollection = Db.collection("sizeCharts");
@@ -63,8 +66,8 @@ async function run() {
     productsCollection = Db.collection("all-products");
     categoriesCollection = Db.collection("categories");
 
-    // await client.db("admin").command({ ping: 1 });
-    // console.log("Connected to MongoDB!");
+    await client.db("admin").command({ ping: 1 });
+    console.log("Connected to MongoDB!");
   } catch (err) {
     console.error("DB connection failed:", err);
   }
@@ -89,33 +92,12 @@ app.post("/orders", async (req, res) => {
   }
 });
 
-// app.get("/orders", async (req, res) => {
-//   try {
-//     const result = await ordersCollection.find().toArray();
-//     res.send(result);
-//   } catch (err) {
-//     res.status(500).send({ error: err.message });
-//   }
-// });
-
-// =================new order Api================
-
 app.get("/orders", async (req, res) => {
   try {
-    const { search } = req.query;
-    let query = {};
-    if (search) {
-      query.name = { $regex: search, $options: "i" };
-    }
-    const result = await ordersCollection
-      .find(query)
-      .sort({ _id: -1 })
-      .toArray();
-
+    const result = await ordersCollection.find().toArray();
     res.send(result);
   } catch (err) {
-    console.error("Error fetching orders:", err);
-    res.status(500).send({ error: "Failed to fetch orders." });
+    res.status(500).send({ error: err.message });
   }
 });
 
@@ -156,15 +138,16 @@ const blogStorage = multer.diskStorage({
 });
 const uploadBlog = multer({ storage: blogStorage });
 
+// --- NEW: Middleware to handle two separate image fields for blogs ---
 const blogUploadFields = uploadBlog.fields([
   { name: "image", maxCount: 1 },
   { name: "extraImage", maxCount: 1 },
-  { name: "authorImage", maxCount: 1 },
 ]);
 
-// Create blog (UPDATED with Author Image)
+// Create blog (UPDATED)
 app.post("/blogs", blogUploadFields, async (req, res) => {
   try {
+    // 1. Destructure all new text fields from the request body
     const {
       title,
       category,
@@ -174,13 +157,9 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
       shortDescription,
       note,
       tags,
-      authorName,
-      authorBio,
-      authorSocialLink1,
-      authorSocialLink2,
-      authorSocialLink3,
     } = req.body;
 
+    // 2. Handle files from req.files (plural) for both fields
     const blogImage =
       req.files && req.files["image"]
         ? `/uploads/blogs/${req.files["image"][0].filename}`
@@ -189,12 +168,8 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
       req.files && req.files["extraImage"]
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : null;
-    // NEW: Handle author image file
-    const authorImage =
-      req.files && req.files["authorImage"]
-        ? `/uploads/blogs/${req.files["authorImage"][0].filename}`
-        : null;
 
+    // 3. Include all new fields in the data to be saved
     const blogData = {
       title,
       category,
@@ -206,16 +181,11 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
       tags,
       image: blogImage,
       extraImage: extraBlogImage,
-      authorName: authorName || "",
-      authorBio: authorBio || "",
-      authorImage: authorImage, // NEW: Add author image path
-      authorSocialLink1: authorSocialLink1 || "",
-      authorSocialLink2: authorSocialLink2 || "",
-      authorSocialLink3: authorSocialLink3 || "",
       createdAt: new Date(),
     };
 
     const result = await blogsCollection.insertOne(blogData);
+
     const newBlog = await blogsCollection.findOne({ _id: result.insertedId });
     res
       .status(201)
@@ -227,49 +197,24 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
 });
 
 // Get all blogs
-// ==========add here filter ======================
-// app.get("/blogs", async (req, res) => {
-//   try {
-//     const result = await blogsCollection
-//       .find()
-//       .sort({ createdAt: -1 })
-//       .toArray();
-//     res.send(result);
-//   } catch (err) {
-//     res.status(500).send({ error: err.message });
-//   }
-// });
-
-// ===============new get api for blog get=========
-
 app.get("/blogs", async (req, res) => {
   try {
-    const { search, category } = req.query;
-    let query = {};
-    if (category && category !== "all") {
-      query.category = category;
-    }
-    if (search) {
-      query.title = { $regex: search, $options: "i" };
-    }
     const result = await blogsCollection
-      .find(query)
-      .sort({ createsAt: -1 })
+      .find()
+      .sort({ createdAt: -1 })
       .toArray();
     res.send(result);
   } catch (err) {
-    console.error("Error fetching blogs:", err);
-    res.status(500).send({ error: "Failed to fetch blogs." });
+    res.status(500).send({ error: err.message });
   }
 });
-
-// =========new code end========
 
 // NEW: Get a single blog by ID
 app.get("/blogs/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Validate the ID format
     if (!ObjectId.isValid(id)) {
       return res.status(400).send({ error: "Invalid blog ID format." });
     }
@@ -277,6 +222,7 @@ app.get("/blogs/:id", async (req, res) => {
     const query = { _id: new ObjectId(id) };
     const blog = await blogsCollection.findOne(query);
 
+    // If no blog is found, return a 404 error
     if (!blog) {
       return res.status(404).send({ error: "Blog not found." });
     }
@@ -288,16 +234,18 @@ app.get("/blogs/:id", async (req, res) => {
   }
 });
 
-// Update blog (UPDATED with Author Image)
+// Update blog (UPDATED)
 app.put("/blogs/:id", blogUploadFields, async (req, res) => {
   try {
     const { id } = req.params;
+
     if (!ObjectId.isValid(id)) {
       return res
         .status(400)
         .send({ success: false, error: "Invalid blog ID." });
     }
 
+    // 1. Destructure all new text fields and existing image paths
     const {
       title,
       category,
@@ -309,28 +257,20 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
       tags,
       existingImage,
       existingExtraImage,
-      authorName,
-      authorBio,
-      existingAuthorImage,
-      authorSocialLink1,
-      authorSocialLink2,
-      authorSocialLink3,
     } = req.body;
 
+    // 2. Logic to determine final image paths (new upload vs existing)
     const blogImage =
       req.files && req.files["image"]
         ? `/uploads/blogs/${req.files["image"][0].filename}`
         : existingImage || null;
+
     const extraBlogImage =
       req.files && req.files["extraImage"]
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : existingExtraImage || null;
 
-    const authorImage =
-      req.files && req.files["authorImage"]
-        ? `/uploads/blogs/${req.files["authorImage"][0].filename}`
-        : existingAuthorImage || null;
-
+    // 3. Include all new fields in the updated data object
     const updatedBlogData = {
       title,
       category,
@@ -342,12 +282,6 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
       tags,
       image: blogImage,
       extraImage: extraBlogImage,
-      authorName,
-      authorBio,
-      authorImage,
-      authorSocialLink1,
-      authorSocialLink2,
-      authorSocialLink3,
       updatedAt: new Date(),
     };
 
@@ -359,6 +293,7 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
     if (result.matchedCount === 0) {
       return res.status(404).send({ success: false, error: "Blog not found." });
     }
+
     const updatedBlog = await blogsCollection.findOne({
       _id: new ObjectId(id),
     });
@@ -384,7 +319,7 @@ app.delete("/blogs/:id", async (req, res) => {
   }
 });
 
-
+// ... (rest of your routes remain unchanged)
 
 app.post("/api/post-users", async (req, res) => {
   try {
@@ -503,119 +438,46 @@ app.delete("/categories/:id", async (req, res) => {
   });
   res.send(result);
 });
-// ===============================new code
-// POST /comments
 
 app.post("/comments", async (req, res) => {
   try {
     const comment = req.body;
-    const commentWithTimestamp = {
-      ...comment,
-      createdAt: new Date(),
-    };
-    const result = await commentsCollection.insertOne(commentWithTimestamp);
+    const result = await commentsCollection.insertOne(comment);
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
 
-// GET /comments -
 app.get("/comments", async (req, res) => {
   try {
-    const blogId = req.query.blogId;
+    
+    const { blogId } = req.query;
     let query = {};
     if (blogId) {
       query = { blogId: blogId };
     }
-    const result = await commentsCollection.find(query).toArray();
+
+    const result = await commentsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+      
+    res.send(result);
+  } catch (err) {
+    console.error("Error fetching comments:", err); 
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.get("/api/find-all-users", async (req, res) => {
+  try {
+    const result = await usersCollection.find().toArray();
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
-
-// ---------------------------------NEW------------------------------------------------------
-
-app.get("/api/users", async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const search = req.query.search || "";
-    const skip = (page - 1) * limit;
-
-    const queryFilter = {
-      role: "user", // Only fetch documents with the role 'user'
-      ...(search && { name: { $regex: search, $options: "i" } }),
-    };
-
-    const [users, totalUsers] = await Promise.all([
-      usersCollection.find(queryFilter).skip(skip).limit(limit).toArray(),
-      usersCollection.countDocuments(queryFilter),
-    ]);
-
-    res.send({
-      users,
-      totalUsers,
-      totalPages: Math.ceil(totalUsers / limit),
-      currentPage: page,
-    });
-  } catch (err) {
-    console.error("Error fetching users:", err);
-    res.status(500).send({ error: err.message });
-  }
-});
-
-// GET /api/staff - Simple endpoint to get ALL staff members (for small lists)
-app.get("/api/staff", async (req, res) => {
-  try {
-    const queryFilter = { role: "staff" };
-    const staff = await usersCollection.find(queryFilter).toArray();
-    res.send(staff);
-  } catch (err) {
-    console.error("Error fetching staff:", err);
-    res.status(500).send({ error: err.message });
-  }
-});
-
-// GET /api/promotable-users - Lightweight endpoint for the AddStaff dropdown
-app.get("/api/promotable-users", async (req, res) => {
-  try {
-    const query = { role: "user" };
-    // Projection only sends the fields we absolutely need, making it very fast
-    const options = {
-      projection: { _id: 1, name: 1, email: 1 },
-      sort: { name: 1 }, // Sort alphabetically for a better user experience
-    };
-    const users = await usersCollection.find(query, options).toArray();
-    res.send(users);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
-});
-
-app.get("/api/stats", async (req, res) => {
-  try {
-    // Run multiple count queries in parallel for maximum efficiency
-    const [totalUsers, totalProducts, totalOrders] = await Promise.all([
-      usersCollection.countDocuments({}), // Counts ALL documents in the users collection
-      productsCollection.countDocuments({}),
-      ordersCollection.countDocuments({}),
-    ]);
-
-    // Send a single, small JSON object with the results
-    res.send({
-      totalUsers,
-      totalProducts,
-      totalOrders,
-    });
-  } catch (err) {
-    console.error("Error fetching dashboard stats:", err);
-    res.status(500).send({ error: err.message });
-  }
-});
-
-// ------------------------------------------------------------------------------------------------------
 
 app.post("/address", async (req, res) => {
   try {
@@ -646,6 +508,7 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
+
 
 // ----------------- add products related api
 app.post(
@@ -715,7 +578,7 @@ app.post(
         productCategory,
         productSubCategory,
         productSize,
-        colors: productColors,
+        productColors,
         availabelVarients: parsedVariants,
         Gender,
         fit,
@@ -754,6 +617,7 @@ app.get("/find-products", async (req, res) => {
   }
 });
 
+
 app.delete("/products/:id", async (req, res) => {
   try {
     const id = req.params.id;
@@ -762,19 +626,16 @@ app.delete("/products/:id", async (req, res) => {
     const result = await productsCollection.deleteOne(query);
 
     if (result.deletedCount > 0) {
-      res
-        .status(200)
-        .send({ success: true, message: "Product deleted successfully" });
+      res.status(200).send({ success: true, message: "Product deleted successfully" });
     } else {
       res.status(404).send({ success: false, message: "Product not found" });
     }
   } catch (error) {
     console.error("Delete error:", error);
-    res
-      .status(500)
-      .send({ success: false, message: "Failed to delete product" });
+    res.status(500).send({ success: false, message: "Failed to delete product" });
   }
 });
+
 
 app.patch(
   "/update-product/:id",
@@ -787,6 +648,7 @@ app.patch(
   async (req, res) => {
     try {
       const { id } = req.params;
+
 
       if (!ObjectId.isValid(id)) {
         return res
@@ -888,15 +750,14 @@ app.patch(
       res.send({ success: true, message: "Product updated successfully!" });
     } catch (err) {
       console.error("Error while updating product:", err);
-      res.status(500).send({
-        success: false,
-        message: "An internal server error occurred.",
-      });
+      res
+        .status(500)
+        .send({ success: false, message: "An internal server error occurred." });
     }
   }
 );
 
-// ----------- product management
+// ----------- product management 
 app.post("/post-productAttribute", async (req, res) => {
   try {
     let { key, value } = req.body;
@@ -958,7 +819,7 @@ app.post("/post-productAttribute", async (req, res) => {
     console.error("Error in /post-productAttribute:", err);
     res.status(500).send({ error: err.message });
   }
-});
+}); 
 
 app.get("/find-productAttributes", async (req, res) => {
   try {
@@ -969,7 +830,7 @@ app.get("/find-productAttributes", async (req, res) => {
   }
 });
 
-// ---------------- product review
+// ---------------- product review 
 app.post("/post-productReview", async (req, res) => {
   try {
     const data = req.body;
@@ -1088,6 +949,30 @@ app.delete("/size-charts/:id", async (req, res) => {
     res.send({ success: true, message: "Size chart deleted." });
   } catch (err) {
     res.status(500).send({ success: false, error: err.message });
+  }
+});
+
+// ChatGPT route
+app.post("/api/chatgpt", async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    // Use new method
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo", // or "gpt-4o" if you have access
+      messages: [{ role: "user", content: message }],
+    });
+
+    res.json({
+      reply: response.choices[0].message.content,
+    });
+  } catch (error) {
+    console.error("ChatGPT error:", error);
+    res.status(500).json({ error: "Failed to get response from ChatGPT" });
   }
 });
 
