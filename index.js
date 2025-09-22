@@ -6,7 +6,6 @@ require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const OpenAI = require("openai");
 
 app.use(express.json());
 // app.use(cors({ origin: "http://localhost:3000" }));
@@ -17,13 +16,10 @@ app.use(
       "http://localhost:3000",
       "http://localhost:5000",
       "https://ayira-ecommerce-main.vercel.app",
+      "https://y-lac-seven.vercel.app",
     ],
   })
 );
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -51,7 +47,7 @@ let categoriesCollection;
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const Db = client.db("Ayira-Database");
 
     sizeChartsCollection = Db.collection("sizeCharts");
@@ -66,8 +62,8 @@ async function run() {
     productsCollection = Db.collection("all-products");
     categoriesCollection = Db.collection("categories");
 
-    await client.db("admin").command({ ping: 1 });
-    console.log("Connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Connected to MongoDB!");
   } catch (err) {
     console.error("DB connection failed:", err);
   }
@@ -92,12 +88,33 @@ app.post("/orders", async (req, res) => {
   }
 });
 
+// app.get("/orders", async (req, res) => {
+//   try {
+//     const result = await ordersCollection.find().toArray();
+//     res.send(result);
+//   } catch (err) {
+//     res.status(500).send({ error: err.message });
+//   }
+// });
+
+// =================new order Api================
+
 app.get("/orders", async (req, res) => {
   try {
-    const result = await ordersCollection.find().toArray();
+    const { search } = req.query;
+    let query = {};
+    if (search) {
+      query.name = { $regex: search, $options: "i" };
+    }
+    const result = await ordersCollection
+      .find(query)
+      .sort({ _id: -1 })
+      .toArray();
+
     res.send(result);
   } catch (err) {
-    res.status(500).send({ error: err.message });
+    console.error("Error fetching orders:", err);
+    res.status(500).send({ error: "Failed to fetch orders." });
   }
 });
 
@@ -138,10 +155,10 @@ const blogStorage = multer.diskStorage({
 });
 const uploadBlog = multer({ storage: blogStorage });
 
-// --- NEW: Middleware to handle two separate image fields for blogs ---
 const blogUploadFields = uploadBlog.fields([
   { name: "image", maxCount: 1 },
   { name: "extraImage", maxCount: 1 },
+  { name: "authorImage", maxCount: 1 }
 ]);
 
 // Create blog (UPDATED)
@@ -169,7 +186,6 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : null;
 
-    // 3. Include all new fields in the data to be saved
     const blogData = {
       title,
       category,
@@ -197,15 +213,92 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
 });
 
 // Get all blogs
+// ==========add here filter ======================
+// app.get("/blogs", async (req, res) => {
+//   try {
+//     const result = await blogsCollection
+//       .find()
+//       .sort({ createdAt: -1 })
+//       .toArray();
+//     res.send(result);
+//   } catch (err) {
+//     res.status(500).send({ error: err.message });
+//   }
+// });
+
+// ===============new get api for blog get=========
+
 app.get("/blogs", async (req, res) => {
   try {
-    const result = await blogsCollection
-      .find()
-      .sort({ createdAt: -1 })
-      .toArray();
-    res.send(result);
+    
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+   
+    const { search, category } = req.query;
+    let query = {};
+    if (category && category !== "all") {
+      query.category = category;
+    }
+    if (search) {
+      
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { content: { $regex: search, $options: "i" } },
+        { tags: { $regex: search, $options: "i" } },
+      ];
+    }
+  const [blogs, totalBlogs] = await Promise.all([
+      
+      blogsCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      
+      blogsCollection.countDocuments(query),
+    ]);
+
+   
+    const totalPages = Math.ceil(totalBlogs / limit);
+
+  
+    res.send({
+      blogs,
+      totalBlogs,
+      totalPages,
+      currentPage: page,
+    });
   } catch (err) {
-    res.status(500).send({ error: err.message });
+    console.error("Error fetching blogs:", err);
+    res.status(500).send({ error: "Failed to fetch blogs." });
+  }
+});
+
+// =========new code end========
+app.get("/blogs/search-titles", async (req, res) => {
+  try {
+    const { q } = req.query; 
+
+    if (!q || q.trim() === "") {
+      return res.send([]);
+    }
+    
+    const query = { title: { $regex: q, $options: "i" } };
+    const projection = { _id: 1, title: 1 };
+
+    const blogs = await blogsCollection
+      .find(query)
+      .project(projection)
+      .limit(10)
+      .toArray();
+
+    res.send(blogs);
+  } catch (err) {
+    console.error("Error searching blog titles:", err);
+    res.status(500).send({ error: "Failed to search blogs." });
   }
 });
 
@@ -214,7 +307,6 @@ app.get("/blogs/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validate the ID format
     if (!ObjectId.isValid(id)) {
       return res.status(400).send({ error: "Invalid blog ID format." });
     }
@@ -222,7 +314,6 @@ app.get("/blogs/:id", async (req, res) => {
     const query = { _id: new ObjectId(id) };
     const blog = await blogsCollection.findOne(query);
 
-    // If no blog is found, return a 404 error
     if (!blog) {
       return res.status(404).send({ error: "Blog not found." });
     }
@@ -270,7 +361,6 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : existingExtraImage || null;
 
-    // 3. Include all new fields in the updated data object
     const updatedBlogData = {
       title,
       category,
@@ -438,46 +528,121 @@ app.delete("/categories/:id", async (req, res) => {
   });
   res.send(result);
 });
+// ===============================new code
+// POST /comments
 
 app.post("/comments", async (req, res) => {
   try {
     const comment = req.body;
-    const result = await commentsCollection.insertOne(comment);
+    const commentWithTimestamp = {
+      ...comment,
+      createdAt: new Date(),
+    };
+    const result = await commentsCollection.insertOne(commentWithTimestamp);
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
 
+// ... rest of your code
+
+// GET /comments -
 app.get("/comments", async (req, res) => {
   try {
-    
-    const { blogId } = req.query;
+    const blogId = req.query.blogId;
     let query = {};
     if (blogId) {
       query = { blogId: blogId };
     }
-
-    const result = await commentsCollection
-      .find(query)
-      .sort({ createdAt: -1 })
-      .toArray();
-      
+    const result = await commentsCollection.find(query).toArray();
     res.send(result);
   } catch (err) {
-    console.error("Error fetching comments:", err); 
     res.status(500).send({ error: err.message });
   }
 });
 
-app.get("/api/find-all-users", async (req, res) => {
+// ---------------------------------NEW------------------------------------------------------
+
+app.get("/api/users", async (req, res) => {
   try {
-    const result = await usersCollection.find().toArray();
-    res.send(result);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || "";
+    const skip = (page - 1) * limit;
+
+    const queryFilter = {
+      role: 'user', // Only fetch documents with the role 'user'
+      ...(search && { name: { $regex: search, $options: "i" } }),
+    };
+
+    const [users, totalUsers] = await Promise.all([
+      usersCollection.find(queryFilter).skip(skip).limit(limit).toArray(),
+      usersCollection.countDocuments(queryFilter),
+    ]);
+
+    res.send({
+      users,
+      totalUsers,
+      totalPages: Math.ceil(totalUsers / limit),
+      currentPage: page,
+    });
+  } catch (err) {
+    console.error("Error fetching users:", err);
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// GET /api/staff - Simple endpoint to get ALL staff members (for small lists)
+app.get("/api/staff", async (req, res) => {
+  try {
+    const queryFilter = { role: 'staff' };
+    const staff = await usersCollection.find(queryFilter).toArray();
+    res.send(staff);
+  } catch (err) {
+    console.error("Error fetching staff:", err);
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// GET /api/promotable-users - Lightweight endpoint for the AddStaff dropdown
+app.get("/api/promotable-users", async (req, res) => {
+  try {
+    const query = { role: "user" };
+    // Projection only sends the fields we absolutely need, making it very fast
+    const options = {
+      projection: { _id: 1, name: 1, email: 1 },
+      sort: { name: 1 } // Sort alphabetically for a better user experience
+    };
+    const users = await usersCollection.find(query, options).toArray();
+    res.send(users);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
+
+app.get("/api/stats", async (req, res) => {
+  try {
+    // Run multiple count queries in parallel for maximum efficiency
+    const [totalUsers, totalProducts, totalOrders] = await Promise.all([
+      usersCollection.countDocuments({}), // Counts ALL documents in the users collection
+      productsCollection.countDocuments({}),
+      ordersCollection.countDocuments({}),
+    ]);
+
+    // Send a single, small JSON object with the results
+    res.send({
+      totalUsers,
+      totalProducts,
+      totalOrders,
+    });
+  } catch (err) {
+    console.error("Error fetching dashboard stats:", err);
+    res.status(500).send({ error: err.message });
+  }
+});
+
+// ------------------------------------------------------------------------------------------------------
 
 app.post("/address", async (req, res) => {
   try {
@@ -508,7 +673,6 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
-
 
 // ----------------- add products related api
 app.post(
@@ -578,7 +742,7 @@ app.post(
         productCategory,
         productSubCategory,
         productSize,
-        productColors,
+        colors: productColors,
         availabelVarients: parsedVariants,
         Gender,
         fit,
@@ -610,13 +774,55 @@ app.post(
 
 app.get("/find-products", async (req, res) => {
   try {
-    const result = await productsCollection.find().toArray();
+    const {
+      category,
+      subCategory,
+      size,
+      colour,
+      fit,
+      gender,
+      sustainability,
+            search,
+
+    } = req.query;
+
+    let query = {};
+
+    if (category) {
+      query.productCategory = { $regex: new RegExp(category, "i") };
+    }
+    if (subCategory) {
+      query.productSubCategory = { $regex: new RegExp(subCategory, "i") };
+    }
+    if (size) {
+      query.productSize = size;
+    }
+    if (colour) {
+      query.productColour = colour;
+    }
+    if (fit) {
+      query.fit = fit;
+    }
+    if (gender) {
+   
+      query.Gender = gender;
+    }
+    if (sustainability) {
+     
+      query.Sustainability = sustainability;
+    }
+
+        if (search) {
+      query.title = { $regex: new RegExp(search, "i") };
+    }
+
+
+    const result = await productsCollection.find(query).toArray();
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
-
 
 app.delete("/products/:id", async (req, res) => {
   try {
@@ -626,16 +832,19 @@ app.delete("/products/:id", async (req, res) => {
     const result = await productsCollection.deleteOne(query);
 
     if (result.deletedCount > 0) {
-      res.status(200).send({ success: true, message: "Product deleted successfully" });
+      res
+        .status(200)
+        .send({ success: true, message: "Product deleted successfully" });
     } else {
       res.status(404).send({ success: false, message: "Product not found" });
     }
   } catch (error) {
     console.error("Delete error:", error);
-    res.status(500).send({ success: false, message: "Failed to delete product" });
+    res
+      .status(500)
+      .send({ success: false, message: "Failed to delete product" });
   }
 });
-
 
 app.patch(
   "/update-product/:id",
@@ -648,7 +857,6 @@ app.patch(
   async (req, res) => {
     try {
       const { id } = req.params;
-
 
       if (!ObjectId.isValid(id)) {
         return res
@@ -750,14 +958,15 @@ app.patch(
       res.send({ success: true, message: "Product updated successfully!" });
     } catch (err) {
       console.error("Error while updating product:", err);
-      res
-        .status(500)
-        .send({ success: false, message: "An internal server error occurred." });
+      res.status(500).send({
+        success: false,
+        message: "An internal server error occurred.",
+      });
     }
   }
 );
 
-// ----------- product management 
+// ----------- product management
 app.post("/post-productAttribute", async (req, res) => {
   try {
     let { key, value } = req.body;
@@ -819,7 +1028,7 @@ app.post("/post-productAttribute", async (req, res) => {
     console.error("Error in /post-productAttribute:", err);
     res.status(500).send({ error: err.message });
   }
-}); 
+});
 
 app.get("/find-productAttributes", async (req, res) => {
   try {
@@ -830,7 +1039,7 @@ app.get("/find-productAttributes", async (req, res) => {
   }
 });
 
-// ---------------- product review 
+// ---------------- product review
 app.post("/post-productReview", async (req, res) => {
   try {
     const data = req.body;
@@ -952,29 +1161,51 @@ app.delete("/size-charts/:id", async (req, res) => {
   }
 });
 
-// ChatGPT route
-app.post("/api/chatgpt", async (req, res) => {
+
+// ======================= GEMINI CHATBOT ROUTE =======================
+app.post('/api/gemini', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message } = req.body; // Get the message from the request body
 
     if (!message) {
-      return res.status(400).json({ error: "Message is required" });
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+    
+    // Call the Google Gemini API
+    const response = await fetch(GEMINI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: message }] }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API Error: ${errorText}`);
     }
 
-    // Use new method
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // or "gpt-4o" if you have access
-      messages: [{ role: "user", content: message }],
-    });
+    const data = await response.json();
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    res.json({
-      reply: response.choices[0].message.content,
-    });
+    if (!reply) {
+      return res.status(500).json({ error: "No content in response from Gemini." });
+    }
+
+    // Send the clean reply back to the frontend
+    return res.status(200).json({ reply });
+
   } catch (error) {
-    console.error("ChatGPT error:", error);
-    res.status(500).json({ error: "Failed to get response from ChatGPT" });
+    console.error("Error in /api/gemini route:", error);
+    return res.status(500).json({ error: error.message });
   }
 });
+// =====================================================================
 
 app.listen(port, () => {
   console.log("🚀 ayira server is running on port", port);
