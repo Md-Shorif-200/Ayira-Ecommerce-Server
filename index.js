@@ -22,7 +22,6 @@ app.use(
 );
 
 
-
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.56yvv.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -46,7 +45,7 @@ let productAttributeCollection;
 let productReviewCollection;
 let productsCollection;
 let categoriesCollection;
-let whichListCollection;
+let wishListsCollection;
 
 async function run() {
   try {
@@ -64,7 +63,7 @@ async function run() {
     productReviewCollection = Db.collection("Product-Reviews");
     productsCollection = Db.collection("all-products");
     categoriesCollection = Db.collection("categories");
-    whichListCollection = Db.collection("whichLists");
+    wishListsCollection = Db.collection("wishlists");
 
     await client.db("admin").command({ ping: 1 });
     console.log("Connected to MongoDB!");
@@ -138,7 +137,7 @@ const blogStorage = multer.diskStorage({
 });
 const uploadBlog = multer({ storage: blogStorage });
 
-
+// --- NEW: Middleware to handle two separate image fields for blogs ---
 const blogUploadFields = uploadBlog.fields([
   { name: "image", maxCount: 1 },
   { name: "extraImage", maxCount: 1 },
@@ -169,7 +168,7 @@ app.post("/blogs", blogUploadFields, async (req, res) => {
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : null;
 
-    
+    // 3. Include all new fields in the data to be saved
     const blogData = {
       title,
       category,
@@ -214,7 +213,7 @@ app.get("/blogs/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    
+    // Validate the ID format
     if (!ObjectId.isValid(id)) {
       return res.status(400).send({ error: "Invalid blog ID format." });
     }
@@ -222,7 +221,7 @@ app.get("/blogs/:id", async (req, res) => {
     const query = { _id: new ObjectId(id) };
     const blog = await blogsCollection.findOne(query);
 
-   
+    // If no blog is found, return a 404 error
     if (!blog) {
       return res.status(404).send({ error: "Blog not found." });
     }
@@ -233,7 +232,6 @@ app.get("/blogs/:id", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
-
 
 // Update blog (UPDATED)
 app.put("/blogs/:id", blogUploadFields, async (req, res) => {
@@ -271,7 +269,7 @@ app.put("/blogs/:id", blogUploadFields, async (req, res) => {
         ? `/uploads/blogs/${req.files["extraImage"][0].filename}`
         : existingExtraImage || null;
 
- 
+    // 3. Include all new fields in the updated data object
     const updatedBlogData = {
       title,
       category,
@@ -432,8 +430,6 @@ app.delete("/api/users/:id", async (req, res) => {
   }
 });
 
-
-
 app.delete("/categories/:id", async (req, res) => {
   const { id } = req.params;
   const result = await categoriesCollection.deleteOne({
@@ -454,9 +450,21 @@ app.post("/comments", async (req, res) => {
 
 app.get("/comments", async (req, res) => {
   try {
-    const result = await commentsCollection.find().toArray();
+    
+    const { blogId } = req.query;
+    let query = {};
+    if (blogId) {
+      query = { blogId: blogId };
+    }
+
+    const result = await commentsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+      
     res.send(result);
   } catch (err) {
+    console.error("Error fetching comments:", err); 
     res.status(500).send({ error: err.message });
   }
 });
@@ -569,7 +577,7 @@ app.post(
         productCategory,
         productSubCategory,
         productSize,
-        colors: productColors,
+        productColors,
         availabelVarients: parsedVariants,
         Gender,
         fit,
@@ -869,6 +877,191 @@ app.get("/find-productAttributes", async (req, res) => {
   }
 });
 
+// delete product category
+app.delete("/delete-productAttribute/category/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.category": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Category deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Category not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete category",
+      error: error.message,
+    });
+  }
+});
+
+// delete product sub category
+app.delete("/delete-productAttribute/subCategory/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.subCategory": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "sub Category deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "sub Category not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete sub Category",
+      error: error.message,
+    });
+  }
+});
+
+
+// delete product color
+app.delete("/delete-productAttribute/ProductColour/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.ProductColour": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Color deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Color not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete Color",
+      error: error.message,
+    });
+  }
+});
+
+// delete product fit
+app.delete("/delete-productAttribute/productFit/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.productFit": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Color deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Color not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete Color",
+      error: error.message,
+    });
+  }
+});
+
+// delete product size
+app.delete("/delete-productAttribute/productSize/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.productSize": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Color deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Color not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete Color",
+      error: error.message,
+    });
+  }
+});
+
+
+
+
+
 // ---------------- product review 
 app.post("/post-productReview", async (req, res) => {
   try {
@@ -993,32 +1186,37 @@ app.delete("/size-charts/:id", async (req, res) => {
 
 
 
-// ---------------- whichlist 
-app.post("/add-whichlist", async (req, res) => {
+
+
+
+
+
+// ---------------- wishlist 
+app.post("/add-wishlist", async (req, res) => {
   try {
     const data = req.body;
-    const result = await whichListCollection.insertOne(data);
+    const result = await wishListsCollection.insertOne(data);
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
 
-app.get("/find-whichlist", async (req, res) => {
+app.get("/find-wishlist", async (req, res) => {
   try {
-    const result = await whichListCollection.find().toArray();
+    const result = await wishListsCollection.find().toArray();
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
 
-app.get("/find-whichlist/:email", async (req, res) => {
+app.get("/find-wishlist/:email", async (req, res) => {
   try {
     const email = req.params.email;
 
 
-    const wishlistData = await whichListCollection.find({ email }).toArray();
+    const wishlistData = await wishListsCollection.find({ email }).toArray();
 
 
     const productIds = wishlistData.map(item => new ObjectId(item.productId));
@@ -1045,7 +1243,6 @@ app.get("/find-whichlist/:email", async (req, res) => {
     res.status(500).send({ message: "Server Error" });
   }
 });
-
 
 
 
