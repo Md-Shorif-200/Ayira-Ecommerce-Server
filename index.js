@@ -6,7 +6,7 @@ require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const OpenAI = require("openai");
+
 
 app.use(express.json());
 // app.use(cors({ origin: "http://localhost:3000" }));
@@ -20,9 +20,6 @@ app.use(
     ],
   })
 );
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -48,6 +45,7 @@ let productAttributeCollection;
 let productReviewCollection;
 let productsCollection;
 let categoriesCollection;
+let wishListsCollection;
 
 async function run() {
   try {
@@ -65,6 +63,7 @@ async function run() {
     productReviewCollection = Db.collection("Product-Reviews");
     productsCollection = Db.collection("all-products");
     categoriesCollection = Db.collection("categories");
+    wishListsCollection = Db.collection("wishlists");
 
     await client.db("admin").command({ ping: 1 });
     console.log("Connected to MongoDB!");
@@ -610,12 +609,60 @@ app.post(
 
 app.get("/find-products", async (req, res) => {
   try {
-    const result = await productsCollection.find().toArray();
+    const {
+      category,
+      subCategory,
+      size,
+      colour,
+      fit,
+      gender,
+      sustainability,
+            search,
+
+    } = req.query;
+
+    let query = {};
+
+    if (category) {
+      query.productCategory = { $regex: new RegExp(category, "i") };
+    }
+    if (subCategory) {
+      query.productSubCategory = { $regex: new RegExp(subCategory, "i") };
+    }
+    if (size) {
+      query.productSize = size;
+    }
+    if (colour) {
+      query.productColour = colour;
+    }
+    if (fit) {
+      query.fit = fit;
+    }
+    if (gender) {
+   
+      query.Gender = gender;
+    }
+    if (sustainability) {
+     
+      query.Sustainability = sustainability;
+    }
+
+        if (search) {
+      query.title = { $regex: new RegExp(search, "i") };
+    }
+
+
+    const result = await productsCollection.find(query).toArray();
     res.send(result);
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
+
+
+
+
+
 
 
 app.delete("/products/:id", async (req, res) => {
@@ -830,6 +877,191 @@ app.get("/find-productAttributes", async (req, res) => {
   }
 });
 
+// delete product category
+app.delete("/delete-productAttribute/category/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.category": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Category deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Category not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete category",
+      error: error.message,
+    });
+  }
+});
+
+// delete product sub category
+app.delete("/delete-productAttribute/subCategory/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.subCategory": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "sub Category deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "sub Category not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete sub Category",
+      error: error.message,
+    });
+  }
+});
+
+
+// delete product color
+app.delete("/delete-productAttribute/ProductColour/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.ProductColour": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Color deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Color not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete Color",
+      error: error.message,
+    });
+  }
+});
+
+// delete product fit
+app.delete("/delete-productAttribute/productFit/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.productFit": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Color deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Color not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete Color",
+      error: error.message,
+    });
+  }
+});
+
+// delete product size
+app.delete("/delete-productAttribute/productSize/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.productSize": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Color deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Color not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete Color",
+      error: error.message,
+    });
+  }
+});
+
+
+
+
+
 // ---------------- product review 
 app.post("/post-productReview", async (req, res) => {
   try {
@@ -952,29 +1184,67 @@ app.delete("/size-charts/:id", async (req, res) => {
   }
 });
 
-// ChatGPT route
-app.post("/api/chatgpt", async (req, res) => {
+
+
+
+
+
+
+
+// ---------------- wishlist 
+app.post("/add-wishlist", async (req, res) => {
   try {
-    const { message } = req.body;
-
-    if (!message) {
-      return res.status(400).json({ error: "Message is required" });
-    }
-
-    // Use new method
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // or "gpt-4o" if you have access
-      messages: [{ role: "user", content: message }],
-    });
-
-    res.json({
-      reply: response.choices[0].message.content,
-    });
-  } catch (error) {
-    console.error("ChatGPT error:", error);
-    res.status(500).json({ error: "Failed to get response from ChatGPT" });
+    const data = req.body;
+    const result = await wishListsCollection.insertOne(data);
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
   }
 });
+
+app.get("/find-wishlist", async (req, res) => {
+  try {
+    const result = await wishListsCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.get("/find-wishlist/:email", async (req, res) => {
+  try {
+    const email = req.params.email;
+
+
+    const wishlistData = await wishListsCollection.find({ email }).toArray();
+
+
+    const productIds = wishlistData.map(item => new ObjectId(item.productId));
+
+
+    const products = await productsCollection
+      .find({ _id: { $in: productIds } })
+      .toArray();
+
+
+    const result = wishlistData.map(item => {
+      const product = products.find(
+        p => p._id.toString() === item.productId.toString()
+      );
+      return {
+        ...item,
+        productDetails: product || null
+      };
+    });
+
+    res.send(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: "Server Error" });
+  }
+});
+
+
 
 app.listen(port, () => {
   console.log("🚀 ayira server is running on port", port);
