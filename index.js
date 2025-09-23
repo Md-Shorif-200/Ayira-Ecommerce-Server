@@ -318,6 +318,29 @@ app.delete("/blogs/:id", async (req, res) => {
   }
 });
 
+
+
+app.post("/categories", async (req, res) => {
+  try {
+    const { value } = req.body;
+    if (!value)
+      return res.status(400).send({ error: "Category value is required" });
+    const result = await categoriesCollection.insertOne({ value });
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.get("/categories", async (req, res) => {
+  try {
+    const categories = await categoriesCollection.find().toArray();
+    res.send(categories);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
 // ... (rest of your routes remain unchanged)
 
 app.post("/api/post-users", async (req, res) => {
@@ -348,26 +371,15 @@ app.post("/api/post-users", async (req, res) => {
   }
 });
 
-app.post("/categories", async (req, res) => {
-  try {
-    const { value } = req.body;
-    if (!value)
-      return res.status(400).send({ error: "Category value is required" });
-    const result = await categoriesCollection.insertOne({ value });
-    res.send(result);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
+app.delete("/categories/:id", async (req, res) => {
+  const { id } = req.params;
+  const result = await categoriesCollection.deleteOne({
+    _id: new ObjectId(id),
+  });
+  res.send(result);
 });
 
-app.get("/categories", async (req, res) => {
-  try {
-    const categories = await categoriesCollection.find().toArray();
-    res.send(categories);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
-});
+
 
 app.get("/api/user/:email", async (req, res) => {
   try {
@@ -430,13 +442,65 @@ app.delete("/api/users/:id", async (req, res) => {
   }
 });
 
-app.delete("/categories/:id", async (req, res) => {
-  const { id } = req.params;
-  const result = await categoriesCollection.deleteOne({
-    _id: new ObjectId(id),
-  });
-  res.send(result);
+app.get("/api/find-all-users", async (req, res) => {
+  try {
+    const result = await usersCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+}); 
+
+// GET /api/staff - Simple endpoint to get ALL staff members (for small lists)
+app.get("/api/staff", async (req, res) => {
+  try {
+    const queryFilter = { role: 'staff' };
+    const staff = await usersCollection.find(queryFilter).toArray();
+    res.send(staff);
+  } catch (err) {
+    console.error("Error fetching staff:", err);
+    res.status(500).send({ error: err.message });
+  }
 });
+
+// GET /api/promotable-users - Lightweight endpoint for the AddStaff dropdown
+app.get("/api/promotable-users", async (req, res) => {
+  try {
+    const query = { role: "user" };
+    // Projection only sends the fields we absolutely need, making it very fast
+    const options = {
+      projection: { _id: 1, name: 1, email: 1 },
+      sort: { name: 1 } // Sort alphabetically for a better user experience
+    };
+    const users = await usersCollection.find(query, options).toArray();
+    res.send(users);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.get("/api/stats", async (req, res) => {
+  try {
+    // Run multiple count queries in parallel for maximum efficiency
+    const [totalUsers, totalProducts, totalOrders] = await Promise.all([
+      usersCollection.countDocuments({}), // Counts ALL documents in the users collection
+      productsCollection.countDocuments({}),
+      ordersCollection.countDocuments({}),
+    ]);
+
+    // Send a single, small JSON object with the results
+    res.send({
+      totalUsers,
+      totalProducts,
+      totalOrders,
+    });
+  } catch (err) {
+    console.error("Error fetching dashboard stats:", err);
+    res.status(500).send({ error: err.message });
+  }
+});
+
+
 
 app.post("/comments", async (req, res) => {
   try {
@@ -469,14 +533,7 @@ app.get("/comments", async (req, res) => {
   }
 });
 
-app.get("/api/find-all-users", async (req, res) => {
-  try {
-    const result = await usersCollection.find().toArray();
-    res.send(result);
-  } catch (err) {
-    res.status(500).send({ error: err.message });
-  }
-});
+
 
 app.post("/address", async (req, res) => {
   try {
@@ -607,7 +664,7 @@ app.post(
   }
 );
 
-app.get("/find-products", async (req, res) => {
+app.get("/find-filterd-products", async (req, res) => {
   try {
     const {
       category,
@@ -617,47 +674,44 @@ app.get("/find-products", async (req, res) => {
       fit,
       gender,
       sustainability,
-            search,
-
+      search,
+      page = 1,  // default 1
+      limit = 12 // default 10 per page
     } = req.query;
 
     let query = {};
 
-    if (category) {
-      query.productCategory = { $regex: new RegExp(category, "i") };
-    }
-    if (subCategory) {
-      query.productSubCategory = { $regex: new RegExp(subCategory, "i") };
-    }
-    if (size) {
-      query.productSize = size;
-    }
-    if (colour) {
-      query.productColour = colour;
-    }
-    if (fit) {
-      query.fit = fit;
-    }
-    if (gender) {
-   
-      query.Gender = gender;
-    }
-    if (sustainability) {
-     
-      query.Sustainability = sustainability;
-    }
+    if (category) query.productCategory = { $regex: new RegExp(category, "i") };
+    if (subCategory) query.productSubCategory = { $regex: new RegExp(subCategory, "i") };
+    if (size) query.productSize = size;
+    if (colour) query.productColour = colour;
+    if (fit) query.fit = fit;
+    if (gender) query.Gender = gender;
+    if (sustainability) query.Sustainability = sustainability;
+    if (search) query.title = { $regex: new RegExp(search, "i") };
 
-        if (search) {
-      query.title = { $regex: new RegExp(search, "i") };
-    }
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
+    // total products for pagination info
+    const totalProducts = await productsCollection.countDocuments(query);
 
-    const result = await productsCollection.find(query).toArray();
-    res.send(result);
+    const result = await productsCollection
+      .find(query)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .toArray();
+
+    res.send({
+      data: result,
+      total: totalProducts,
+      page: parseInt(page),
+      pages: Math.ceil(totalProducts / limit)
+    });
   } catch (err) {
     res.status(500).send({ error: err.message });
   }
 });
+
 
 
 
@@ -1055,6 +1109,15 @@ app.delete("/delete-productAttribute/productSize/:id", async (req, res) => {
       message: "Failed to delete Color",
       error: error.message,
     });
+  }
+});
+
+app.get("/find-products", async (req, res) => {
+  try {
+    const result = await productsCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
   }
 });
 
