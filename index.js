@@ -664,7 +664,7 @@ app.post(
   }
 );
 
-app.get("/find-products", async (req, res) => {
+app.get("/find-filterd-products", async (req, res) => {
   try {
     const {
       category,
@@ -676,7 +676,7 @@ app.get("/find-products", async (req, res) => {
       sustainability,
       search,
       page = 1,  // default 1
-      limit = 10 // default 10 per page
+      limit = 12 // default 10 per page
     } = req.query;
 
     let query = {};
@@ -1109,6 +1109,15 @@ app.delete("/delete-productAttribute/productSize/:id", async (req, res) => {
       message: "Failed to delete Color",
       error: error.message,
     });
+  }
+});
+
+app.get("/find-products", async (req, res) => {
+  try {
+    const result = await productsCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
   }
 });
 
