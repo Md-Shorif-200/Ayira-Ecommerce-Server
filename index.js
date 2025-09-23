@@ -7,6 +7,7 @@ const multer = require("multer");
 const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
+
 app.use(express.json());
 // app.use(cors({ origin: "http://localhost:3000" }));
 
@@ -20,6 +21,7 @@ app.use(
     ],
   })
 );
+
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -44,6 +46,7 @@ let productAttributeCollection;
 let productReviewCollection;
 let productsCollection;
 let categoriesCollection;
+let wishListsCollection;
 
 async function run() {
   try {
@@ -61,6 +64,7 @@ async function run() {
     productReviewCollection = Db.collection("Product-Reviews");
     productsCollection = Db.collection("all-products");
     categoriesCollection = Db.collection("categories");
+    wishListsCollection = Db.collection("wishlists");
 
     // await client.db("admin").command({ ping: 1 });
     // console.log("Connected to MongoDB!");
@@ -824,6 +828,12 @@ app.get("/find-products", async (req, res) => {
   }
 });
 
+
+
+
+
+
+
 app.delete("/products/:id", async (req, res) => {
   try {
     const id = req.params.id;
@@ -1039,6 +1049,191 @@ app.get("/find-productAttributes", async (req, res) => {
   }
 });
 
+// delete product category
+app.delete("/delete-productAttribute/category/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.category": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Category deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Category not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete category",
+      error: error.message,
+    });
+  }
+});
+
+// delete product sub category
+app.delete("/delete-productAttribute/subCategory/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.subCategory": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "sub Category deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "sub Category not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete sub Category",
+      error: error.message,
+    });
+  }
+});
+
+
+// delete product color
+app.delete("/delete-productAttribute/ProductColour/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.ProductColour": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Color deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Color not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete Color",
+      error: error.message,
+    });
+  }
+});
+
+// delete product fit
+app.delete("/delete-productAttribute/productFit/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.productFit": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Color deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Color not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete Color",
+      error: error.message,
+    });
+  }
+});
+
+// delete product size
+app.delete("/delete-productAttribute/productSize/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const query = {};
+    const updateDoc = {
+      $pull: {
+        "productAttributes.productSize": { id: id },
+      },
+    };
+
+    const result = await productAttributeCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount > 0) {
+      res.send({
+        success: true,
+        message: "Color deleted successfully",
+        modifiedCount: result.modifiedCount,
+      });
+    } else {
+      res.status(404).send({
+        success: false,
+        message: "Color not found or already deleted",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({
+      success: false,
+      message: "Failed to delete Color",
+      error: error.message,
+    });
+  }
+});
+
+
+
+
+
 // ---------------- product review
 app.post("/post-productReview", async (req, res) => {
   try {
@@ -1162,50 +1357,66 @@ app.delete("/size-charts/:id", async (req, res) => {
 });
 
 
-// ======================= GEMINI CHATBOT ROUTE =======================
-app.post('/api/gemini', async (req, res) => {
+
+
+
+
+
+
+// ---------------- wishlist 
+app.post("/add-wishlist", async (req, res) => {
   try {
-    const { message } = req.body; // Get the message from the request body
-
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
-    }
-    
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
-    
-    // Call the Google Gemini API
-    const response = await fetch(GEMINI_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: message }] }],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Gemini API Error: ${errorText}`);
-    }
-
-    const data = await response.json();
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!reply) {
-      return res.status(500).json({ error: "No content in response from Gemini." });
-    }
-
-    // Send the clean reply back to the frontend
-    return res.status(200).json({ reply });
-
-  } catch (error) {
-    console.error("Error in /api/gemini route:", error);
-    return res.status(500).json({ error: error.message });
+    const data = req.body;
+    const result = await wishListsCollection.insertOne(data);
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
   }
 });
-// =====================================================================
+
+app.get("/find-wishlist", async (req, res) => {
+  try {
+    const result = await wishListsCollection.find().toArray();
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.get("/find-wishlist/:email", async (req, res) => {
+  try {
+    const email = req.params.email;
+
+
+    const wishlistData = await wishListsCollection.find({ email }).toArray();
+
+
+    const productIds = wishlistData.map(item => new ObjectId(item.productId));
+
+
+    const products = await productsCollection
+      .find({ _id: { $in: productIds } })
+      .toArray();
+
+
+    const result = wishlistData.map(item => {
+      const product = products.find(
+        p => p._id.toString() === item.productId.toString()
+      );
+      return {
+        ...item,
+        productDetails: product || null
+      };
+    });
+
+    res.send(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ message: "Server Error" });
+  }
+});
+
+
 
 app.listen(port, () => {
   console.log("🚀 ayira server is running on port", port);
