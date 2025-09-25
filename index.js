@@ -6,7 +6,9 @@ require("dotenv").config();
 const multer = require("multer");
 const path = require("path");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-
+const nodemailer = require("nodemailer"); // <--- ADD THIS LINE
+const Pdfmake = require("pdfmake");
+const fs = require("fs");
 
 app.use(express.json());
 // app.use(cors({ origin: "http://localhost:3000" }));
@@ -18,10 +20,29 @@ app.use(
       "http://localhost:5000",
       "https://ayira-ecommerce-main.vercel.app",
       "https://y-lac-seven.vercel.app",
+      "https://aaryansourcing.com"
     ],
   })
 );
 
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
+
+const fonts = {
+  Helvetica: {
+    normal: 'Helvetica',
+    bold: 'Helvetica-Bold',
+    italics: 'Helvetica-Oblique',
+    bolditalics: 'Helvetica-BoldOblique'
+  }
+};
+
+const printer = new Pdfmake(fonts);
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -722,14 +743,17 @@ const upload = multer({ storage });
 // ----------------- add products related api
 app.post(
   "/post-products",
+  // Updated multer configuration to handle new and changed fields
   upload.fields([
     { name: "mainImage", maxCount: 1 },
-    { name: "galleryImages", maxCount: 10 },
-    { name: "brandLogo", maxCount: 10 },
-    { name: "mainPdfs", maxCount: 10 },
+    { name: "sizeChartImage", maxCount: 1 }, // Added for size chart
+    { name: "galleryImages", maxCount: 50 }, // Increased limit
+    { name: "brandLogo", maxCount: 50 }, // Increased limit
+    { name: "mainPdf", maxCount: 1 }, // Changed from mainPdfs to mainPdf, limit 1
   ]),
   async (req, res) => {
     try {
+      // Destructuring data from request body
       const {
         title,
         productCode,
@@ -751,6 +775,8 @@ app.post(
         printingEmbroidery,
         textileCare,
       } = req.body;
+      
+      // Parsing JSON strings from the form data
       const productColors = colors ? JSON.parse(colors) : [];
       const parsedVariants = availabelVarients
         ? JSON.parse(availabelVarients)
@@ -760,24 +786,37 @@ app.post(
         ? JSON.parse(printingEmbroidery)
         : null;
       const parsedTextileCare = textileCare ? JSON.parse(textileCare) : null;
+
+      // Handling file uploads and generating paths
       const mainImage = req.files["mainImage"]
         ? `/uploads/products/${req.files["mainImage"][0].filename}`
         : null;
+        
+      // Handling the new single size chart image
+      const sizeChartImage = req.files["sizeChartImage"]
+        ? `/uploads/products/${req.files["sizeChartImage"][0].filename}`
+        : null;
+
+      // Handling multiple gallery images
       const galleryImages = req.files["galleryImages"]
         ? req.files["galleryImages"].map(
             (file) => `/uploads/products/${file.filename}`
           )
         : [];
+        
+      // Handling multiple brand logos
       const brandLogo = req.files["brandLogo"]
         ? req.files["brandLogo"].map(
             (file) => `/uploads/products/${file.filename}`
           )
         : [];
-      const mainPdfs = req.files["mainPdfs"]
-        ? req.files["mainPdfs"].map(
-            (file) => `/uploads/products/${file.filename}`
-          )
-        : [];
+        
+      // Handling the single PDF file (FIXED)
+      const mainPdf = req.files["mainPdf"]
+        ? `/uploads/products/${req.files["mainPdf"][0].filename}`
+        : null;
+
+      // Constructing the final product object for database insertion
       const productData = {
         title,
         metaTitle,
@@ -799,18 +838,24 @@ app.post(
         textileCare: parsedTextileCare,
         email,
         mainImage,
+        sizeChartImage, // Added to database object
         galleryImages,
         brandLogo,
-        mainPdfs,
+        mainPdf, // Updated field name
         createdAt: new Date(),
       };
+
+      // Inserting data into the database
       const result = await productsCollection.insertOne(productData);
+      
+      // Sending success response
       res.send({
         success: true,
         message: "Product created successfully",
         insertedId: result.insertedId,
       });
     } catch (err) {
+      // Handling errors
       console.error("Error saving product:", err);
       res.status(500).send({ success: false, error: err.message });
     }
@@ -1504,6 +1549,286 @@ app.post('/api/gemini', async (req, res) => {
   }
 });
 // =====================================================================
+
+app.post("/send-order-emails", async (req, res) => {
+  try {
+    const { userName, userEmail, orderInfo } = req.body;
+    
+
+    const adminEmail = process.env.ADMIN_EMAIL_RECEIVER; 
+
+
+    const adminMailOptions = {
+      from: `"Aaryan Sourcing Order" <${process.env.GMAIL_USER}>`, 
+      to: adminEmail,
+      subject: `New Order Alert! - Style: ${orderInfo.styleNumber}`,
+      html: `
+        <h1>New Order Received</h1>
+        <p>A new order has been placed on your website.</p>
+        <hr>
+        <h3>Order Details:</h3>
+        <ul>
+          <li><strong>Customer Name:</strong> ${userName}</li>
+          <li><strong>Customer Email:</strong> ${userEmail}</li>
+          <li><strong>Style Number:</strong> ${orderInfo.styleNumber}</li>
+          <li><strong>Company:</strong> ${orderInfo.company}</li>
+        </ul>
+        <p>Please log in to the admin dashboard for full details.</p>
+      `,
+    };
+
+    const userMailOptions = {
+      from: `"Aaryan Sourcing" <${process.env.GMAIL_USER}>`,
+      to: userEmail,
+      subject: `Your Order is Confirmed (Style: ${orderInfo.styleNumber})`,
+      html: `
+        <h1>Thank you for your order, ${userName}!</h1>
+        <p>We have successfully received your order. Our team will review it and get back to you soon.</p>
+        <hr>
+        <h3>Your Order Summary:</h3>
+        <ul>
+          <li><strong>Style Number:</strong> ${orderInfo.styleNumber}</li>
+        </ul>
+        <p>If you have any questions, feel free to contact us.</p>
+        <br>
+        <p>Best Regards,</p>
+        <p><strong>Aaryan Sourcing Ltd.</strong></p>
+      `,
+    };
+
+
+    await Promise.all([
+      transporter.sendMail(adminMailOptions),
+      transporter.sendMail(userMailOptions),
+    ]);
+
+    res.status(200).send({ success: true, message: "Emails sent successfully." });
+
+  } catch (error) {
+    console.error("Error sending emails via Gmail:", error);
+    res.status(500).send({ success: false, message: "Failed to send emails." });
+  }
+});
+
+// --- START OF THE NEW API ROUTE ---
+// --- CONFIGURATION FOR YOUR PDFS ---
+// 1. Define WHICH columns to show for EACH collection.
+const columnConfig = {
+  "all-products": {
+    headers: ["Title", "Category", "Sub-Category", "Price", "Colors", "Fit"],
+    keys: ["title", "productCategory", "productSubCategory", "price", "colors", "fit"],
+  },
+  "orders": {
+    headers: ["Customer Name", "Email", "Phone", "Total", "Date"],
+    keys: ["name", "email", "phone", "total", "date"],
+  },
+  // Add configurations for other collections here as needed
+};
+
+// 2. Helper function to format cell content safely
+const formatCellContent = (value, key) => {
+  // If the value is null or undefined, return an empty string immediately.
+  if (value === null || typeof value === 'undefined') {
+    return '';
+  }
+  
+  // Custom formatting for the 'colors' array (with safety checks)
+  if (key === 'colors' && Array.isArray(value)) {
+    const colorNames = value
+      .filter(color => color && typeof color.name === 'string') // Keep only valid color objects
+      .map(color => color.name); // Get the name from each valid object
+    return colorNames.join(', ');
+  }
+  
+  // Custom formatting for dates
+  if (['createdAt', 'updatedAt', 'date'].includes(key) && !isNaN(new Date(value))) {
+    return new Date(value).toLocaleDateString();
+  }
+
+  // Handle other arrays or objects generically
+  if (Array.isArray(value)) return value.join(', ');
+  if (typeof value === 'object') return JSON.stringify(value);
+
+  return value.toString();
+};
+
+
+// --- THE PDF DOWNLOAD API ROUTE ---
+app.get("/download-pdf/:collectionName", async (req, res) => {
+  const { collectionName } = req.params;
+  const config = columnConfig[collectionName];
+
+  if (!config) {
+    return res.status(403).send({ error: "PDF generation is not configured for this collection." });
+  }
+
+  try {
+    const Db = client.db("Ayira-Database");
+    const collection = Db.collection(collectionName);
+    const data = await collection.find({}).toArray();
+
+    if (data.length === 0) {
+      return res.status(404).send({ error: "No documents found in this collection." });
+    }
+
+    const body = [
+      config.headers.map(header => ({ text: header, style: 'tableHeader' })),
+      ...data.map(doc =>
+        config.keys.map(key => formatCellContent(doc[key], key))
+      )
+    ];
+
+    const docDefinition = {
+      pageSize: 'A4',
+      pageOrientation: 'landscape',
+      pageMargins: [40, 60, 40, 60],
+      header: {
+        columns: [
+          { text: 'Aaryan Sourcing Ltd.', alignment: 'left', style: 'documentHeader' },
+          { text: 'Confidential Internal Report', alignment: 'right', style: 'documentHeader' }
+        ],
+        margin: [40, 20, 40, 0]
+      },
+      footer: function(currentPage, pageCount) {
+        return {
+          columns: [
+            { text: `Generated on: ${new Date().toLocaleString()}`, alignment: 'left', style: 'documentFooter' },
+            { text: `Page ${currentPage.toString()} of ${pageCount}`, alignment: 'right', style: 'documentFooter' }
+          ],
+          margin: [40, 20, 40, 0]
+        };
+      },
+      content: [
+        { text: `Data Export: ${collectionName}`, style: 'header' },
+        {
+          style: 'tableExample',
+          table: {
+            headerRows: 1,
+            widths: Array(config.headers.length).fill('*'),
+            body: body,
+          },
+          layout: {
+            fillColor: (rowIndex) => (rowIndex % 2 === 0) ? '#F2F2F2' : null,
+            hLineWidth: () => 0.5,
+            vLineWidth: () => 0.5,
+            hLineColor: () => '#AAAAAA',
+            vLineColor: () => '#AAAAAA',
+          }
+        },
+      ],
+      styles: {
+        header: { fontSize: 22, bold: true, margin: [0, 0, 0, 15], alignment: 'center' },
+        documentHeader: { fontSize: 10, color: 'gray' },
+        documentFooter: { fontSize: 10, color: 'gray' },
+        tableExample: { margin: [0, 5, 0, 15] },
+        tableHeader: { bold: true, fontSize: 13, color: 'white', fillColor: '#333333' },
+      },
+      defaultStyle: { font: 'Helvetica' },
+    };
+
+    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+    
+    const fileName = `${collectionName}-export-${Date.now()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    pdfDoc.pipe(res);
+    pdfDoc.end();
+
+  } catch (error) {
+    console.error("Failed to generate PDF:", error);
+    res.status(500).send({ error: "An internal server error occurred." });
+  }
+});
+
+
+// =============================================================================
+// ============ PROFESSIONAL SINGLE PRODUCT SHEET PDF ROUTE ============
+// =============================================================================
+
+app.get("/download-product-sheet/:id", async (req, res) => {
+  const { id } = req.params;
+
+  // Security & Validation: Check if the ID is a valid MongoDB ObjectId
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ error: "Invalid product ID format." });
+  }
+
+  try {
+    const Db = client.db("Ayira-Database");
+    const collection = Db.collection("all-products");
+    
+    // Fetch the single product document from the database
+    const product = await collection.findOne({ _id: new ObjectId(id) });
+
+    if (!product) {
+      return res.status(404).send({ error: "Product not found." });
+    }
+
+    // --- Define which fields to display and in what order ---
+    const productDetails = [
+      { key: 'Product Title', value: product.title },
+      { key: 'Product Code', value: product.productCode },
+      { key: 'GSM Code', value: product.GSM_Code },
+      { key: 'Category', value: product.productCategory },
+      { key: 'Sub-Category', value: product.productSubCategory },
+      { key: 'Price', value: product.price ? `$${product.price}` : 'N/A' },
+      { key: 'Gender', value: product.Gender },
+      { key: 'Fit', value: product.fit },
+      { key: 'Sustainability', value: product.Sustainability },
+      { key: 'Available Colors', value: formatCellContent(product.colors, 'colors') }, // Reuse our safe helper
+    ];
+
+    // --- Create the PDF body as a two-column layout ---
+    const body = productDetails.map(detail => [
+      { text: detail.key, bold: true }, // Key column (e.g., "Title")
+      detail.value || 'N/A' // Value column (e.g., "Casual Pants")
+    ]);
+
+    // --- Define the Professional PDF document structure ---
+    const docDefinition = {
+      pageSize: 'A4',
+      pageMargins: [40, 60, 40, 60],
+      header: { /* ... same header as before ... */ },
+      footer: function(currentPage, pageCount) { /* ... same footer as before ... */ },
+
+      content: [
+        { text: 'Product Information Sheet', style: 'header' },
+        { text: product.title, style: 'subheader' },
+        {
+          style: 'detailsTable',
+          table: {
+            widths: [150, '*'], // First column is fixed width, second takes remaining space
+            body: body,
+          },
+          layout: 'noBorders' // A clean layout with no grid lines
+        },
+      ],
+      styles: {
+        header: { fontSize: 22, bold: true, margin: [0, 0, 0, 5], alignment: 'center' },
+        subheader: { fontSize: 16, italics: true, margin: [0, 0, 0, 20], alignment: 'center', color: 'gray' },
+        detailsTable: { margin: [0, 5, 0, 15] },
+        documentHeader: { fontSize: 10, color: 'gray' },
+        documentFooter: { fontSize: 10, color: 'gray' },
+      },
+      defaultStyle: { font: 'Helvetica' },
+    };
+
+    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+    
+    const fileName = `product-sheet-${product.productCode || id}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    pdfDoc.pipe(res);
+    pdfDoc.end();
+
+  } catch (error) {
+    console.error("Failed to generate single product PDF:", error);
+    res.status(500).send({ error: "An internal server error occurred." });
+  }
+});
+
 
 app.listen(port, () => {
   console.log("🚀 ayira server is running on port", port);
