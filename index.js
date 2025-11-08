@@ -20,7 +20,8 @@ const corsOptions = {
   origin: [
     "http://localhost:3000",
     "http://localhost:5000",
-    "https://ayira-client.vercel.app"
+    "https://ayira-ecommerce-1.vercel.app",
+    "https://ayira-ecommerce-backend.vercel.app"
   ],
 };
 app.use(cors(corsOptions));
@@ -317,129 +318,39 @@ const blogStorage = multer.diskStorage({
     cb(null, uniqueSuffix + path.extname(file.originalname));
   },
 });
+
 const uploadBlog = multer({ storage: blogStorage });
 
-app.post(
-  "/blogs",
-  uploadBlog.fields([
-    { name: "image", maxCount: 1 },
-    { name: "metaImage", maxCount: 1 },
-  ]),
-  async (req, res) => {
-    try {
-      const {
-        title,
-        category,
-        content,
-        shortDescription,
-        note,
-        tags,
-        metaTitle,
-        metaDescription,
-        mainImageAltText,
-        metaKeywords,
-        metaRobots,
-        ogTitle,
-        ogDescription,
-        twitterTitle,
-        twitterDescription,
-      } = req.body;
-
-      const blogImage = req.files["image"]
-        ? `/uploads/blogs/${req.files["image"][0].filename}`
-        : null;
-      const metaImage = req.files["metaImage"]
-        ? `/uploads/blogs/${req.files["metaImage"][0].filename}`
-        : null;
-
-      const blogData = {
-        title,
-        category,
-        content,
-        shortDescription,
-        note,
-        tags,
-        image: blogImage,
-        metaTitle,
-        metaDescription,
-        mainImageAltText,
-        metaKeywords,
-        metaRobots,
-        metaImage,
-        ogTitle,
-        ogDescription,
-        twitterTitle,
-        twitterDescription,
-        createdAt: new Date(),
-      };
-
-      const result = await blogsCollection.insertOne(blogData);
-      const newBlog = await blogsCollection.findOne({ _id: result.insertedId });
-      res
-        .status(201)
-        .send({ message: "Blog created successfully", blog: newBlog });
-    } catch (err) {
-      console.error("Error creating blog:", err);
-      res.status(500).send({ success: false, error: err.message });
-    }
+//  Create a new blog
+app.post("/blogs",async (req, res) => {
+         const data = req.body;
+         const result = await blogsCollection.insertOne(data);
+         res.send(result)
   }
 );
 
-app.post("/blogs/upload-image", uploadBlog.single("image"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).send({ error: "No image file provided." });
-  }
-  try {
-    const imageUrl = `/uploads/blogs/${req.file.filename}`;
-    res.status(200).send({
-      success: true,
-      imageUrl: imageUrl,
-    });
-  } catch (error) {
-    console.error("Error during blog image upload:", error);
-    res.status(500).send({ error: "Server error during image upload." });
-  }
-});
+
+// app.post("/blogs/upload-image", uploadBlog.single("image"), (req, res) => {
+//   if (!req.file) {
+//     return res.status(400).send({ error: "No image file provided." });
+//   }
+//   try {
+//     const imageUrl = `/uploads/blogs/${req.file.filename}`;
+//     res.status(200).send({
+//       success: true,
+//       imageUrl: imageUrl,
+//     });
+//   } catch (error) {
+//     console.error("Error during blog image upload:", error);
+//     res.status(500).send({ error: "Server error during image upload." });
+//   }
+// });
 
 app.get("/blogs", async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-
-    const { search, category } = req.query;
-    let query = {};
-    if (category && category !== "all") {
-      query.category = category;
-    }
-    if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { content: { $regex: search, $options: "i" } },
-        { tags: { $regex: search, $options: "i" } },
-      ];
-    }
-    const [blogs, totalBlogs] = await Promise.all([
-      blogsCollection
-        .find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .toArray(),
-      blogsCollection.countDocuments(query),
-    ]);
-    const totalPages = Math.ceil(totalBlogs / limit);
-    res.send({
-      blogs,
-      totalBlogs,
-      totalPages,
-      currentPage: page,
-    });
-  } catch (err) {
-    console.error("Error fetching blogs:", err);
-    res.status(500).send({ error: "Failed to fetch blogs." });
-  }
+          const result = await blogsCollection.find().toArray();
+          res.send(result)
 });
+
 app.get("/blogs/search-titles", async (req, res) => {
   try {
     const { q } = req.query;
@@ -477,93 +388,34 @@ app.get("/blogs/:id", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
-app.put(
-  "/blogs/:id",
-  uploadBlog.fields([
-    { name: "image", maxCount: 1 },
-    { name: "metaImage", maxCount: 1 },
-  ]),
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      if (!ObjectId.isValid(id)) {
-        return res
-          .status(400)
-          .send({ success: false, error: "Invalid blog ID." });
-      }
-      const {
-        title,
-        category,
-        content,
-        shortDescription,
-        note,
-        tags,
-        existingImage,
-        metaTitle,
-        metaDescription,
-        mainImageAltText,
-        metaKeywords,
-        metaRobots,
-        existingMetaImage,
-        ogTitle,
-        ogDescription,
-        twitterTitle,
-        twitterDescription,
-      } = req.body;
 
-      const blogImage = req.files["image"]
-        ? `/uploads/blogs/${req.files["image"][0].filename}`
-        : existingImage || null;
-      const metaImage = req.files["metaImage"]
-        ? `/uploads/blogs/${req.files["metaImage"][0].filename}`
-        : existingMetaImage || null;
+app.put("/blogs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, category, tags, note, image } = req.body;
 
-      const updatedBlogData = {
-        title,
-        category,
-        content,
-        shortDescription,
-        note,
-        tags,
-        image: blogImage,
-        metaTitle,
-        metaDescription,
-        mainImageAltText,
-        metaKeywords,
-        metaRobots,
-        metaImage,
-        ogTitle,
-        ogDescription,
-        twitterTitle,
-        twitterDescription,
-        updatedAt: new Date(),
-      };
+    const updateData = {
+      title,
+      category,
+      tags,
+      note,
+      image: image || null,
+      updatedAt: new Date(),
+    };
 
-      const result = await blogsCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: updatedBlogData }
-      );
+    const result = await blogsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateData }
+    );
+    res.send(result)
 
-      if (result.matchedCount === 0) {
-        return res
-          .status(404)
-          .send({ success: false, error: "Blog not found." });
-      }
-
-      const updatedBlog = await blogsCollection.findOne({
-        _id: new ObjectId(id),
-      });
-      res.send({
-        success: true,
-        message: "Blog updated successfully",
-        blog: updatedBlog,
-      });
-    } catch (err) {
-      console.error("Error updating blog:", err);
-      res.status(500).send({ success: false, error: err.message });
-    }
+  } catch (err) {
+    console.error("Error updating blog:", err);
+    res.status(500).send({ success: false, error: err.message });
   }
-);
+});
+
+
 
 app.delete("/blogs/:id", async (req, res) => {
   try {
@@ -709,6 +561,18 @@ app.get("/api/staff", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
+
+// app.get("/api/staff", async (req, res) => {
+//   try {
+//     const queryFilter = { role: "staff" };
+//     const staff = await usersCollection.find(queryFilter).toArray();
+//     res.send(staff);
+//   } catch (err) {
+//     console.error("Error fetching staff:", err);
+//     res.status(500).send({ error: err.message });
+//   }
+// });
+
 app.get("/api/promotable-users", async (req, res) => {
   try {
     const query = { role: "user" };
@@ -796,16 +660,7 @@ app.get("/api/users", async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
-app.get("/api/staff", async (req, res) => {
-  try {
-    const queryFilter = { role: "staff" };
-    const staff = await usersCollection.find(queryFilter).toArray();
-    res.send(staff);
-  } catch (err) {
-    console.error("Error fetching staff:", err);
-    res.status(500).send({ error: err.message });
-  }
-});
+
 
 app.get("/api/promotable-users", async (req, res) => {
   try {
